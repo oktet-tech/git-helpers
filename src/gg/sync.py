@@ -140,7 +140,16 @@ def _execute(
             prev_review_id = action.old_entry.review_id
             continue
 
-        if action.kind == ActionKind.CREATE:
+        # UPDATE / KEEP_DEP entries with an empty review_id are recovery cases
+        # (a previous post failed mid-flight). Without a review_id there is no
+        # `rbt post -r ID`; the call is effectively a fresh post, so it both
+        # accepts and (with --publish) requires reviewers.
+        needs_fresh_post = (
+            action.kind == ActionKind.CREATE
+            or (action.old_entry is not None and not action.old_entry.review_id)
+        )
+
+        if needs_fresh_post:
             if reviewers is not None or groups is not None:
                 create_reviewers = reviewers or []
                 create_groups = groups or []
@@ -165,7 +174,7 @@ def _execute(
             )
             rid = result.review_id
         else:
-            # UPDATE or KEEP_DEP: re-post with -r ID
+            # UPDATE or KEEP_DEP with a real review_id: re-post with -r ID
             assert action.old_entry is not None
             result = post_one(
                 action.new_commit.rev, tracking,

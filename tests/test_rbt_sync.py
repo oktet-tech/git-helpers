@@ -810,6 +810,43 @@ class TestPublishUnchangedOnSync:
         assert [c for c in new_calls if c and c[0] == "publish"] == []
 
 
+class TestEmptyReviewIdRecovery:
+    """When reviews.db has entries with empty review_id (a previous post
+    failed mid-flight), --force re-posts them as fresh posts. The reviewer
+    args must flow through, since the resulting rbt call has no `-r ID` and
+    is therefore a first-post that requires/accepts reviewers."""
+
+    def test_force_repost_passes_reviewers_when_review_id_empty(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        from gg import review_store
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+
+        # Seed reviews.db with a row whose review_id is empty (recovery state)
+        review_store.save_reviews(
+            [
+                review_store.ReviewEntry(
+                    branch="feature", position=1, review_id="",
+                    subject="fix crash",
+                    diff_hash="0" * 40,
+                ),
+            ],
+            cwd=git_repo.work_dir,
+        )
+
+        r = git_repo.run_gg("rbt-sync", "-U", "alice", "-p", "--force")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+
+        post_calls = [c for c in rbt_mock.calls() if c and c[0] == "post"]
+        assert len(post_calls) == 1
+        # Must be a fresh post (no -r) and must include --target-people alice
+        assert "-r" not in post_calls[0]
+        assert "--target-people" in post_calls[0]
+        idx = post_calls[0].index("--target-people")
+        assert post_calls[0][idx + 1] == "alice"
+
+
 class TestSyncRetry:
     def test_keep_publish_retries_after_207(
         self, git_repo: GitRepo, rbt_mock: RbtMock,
