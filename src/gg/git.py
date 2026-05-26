@@ -6,6 +6,14 @@ import subprocess
 from pathlib import Path
 
 
+class NoUpstreamError(RuntimeError):
+    """Raised when the current branch has no upstream and no override was given."""
+
+    def __init__(self, branch: str) -> None:
+        super().__init__(f"no upstream configured for branch '{branch}'")
+        self.branch = branch
+
+
 def _run(*args: str, cwd: Path | None = None) -> str:
     r = subprocess.run(
         ["git", *args],
@@ -27,19 +35,38 @@ def summary(rev: str = "HEAD", *, cwd: Path | None = None) -> str:
     return _run("show", "--quiet", "--format=%s", rev, cwd=cwd)
 
 
-def tracking_branch(*, cwd: Path | None = None) -> str:
-    """Return the upstream tracking branch name."""
-    return branchname("@{u}", cwd=cwd)
+def tracking_branch(*, cwd: Path | None = None, override: str | None = None) -> str:
+    """Return the upstream tracking branch name.
+
+    If ``override`` is given, it is returned verbatim and git is not consulted.
+    Raises ``NoUpstreamError`` when no override is given and the current branch
+    has no upstream.
+    """
+    if override:
+        return override
+    try:
+        return branchname("@{u}", cwd=cwd)
+    except subprocess.CalledProcessError as e:
+        raise NoUpstreamError(branchname(cwd=cwd)) from e
 
 
-def range_base(*, cwd: Path | None = None) -> str:
+def range_base(*, cwd: Path | None = None, override: str | None = None) -> str:
     """Resolve the effective base ref for revision ranges.
 
     When the upstream is a local branch whose own upstream is a
     remote-tracking ref, return the remote-tracking ref so that
     the range excludes commits already on the remote.
+
+    If ``override`` is given, it is returned verbatim and git is not consulted.
+    Raises ``NoUpstreamError`` when no override is given and the current branch
+    has no upstream.
     """
-    full = _run("rev-parse", "--symbolic-full-name", "@{u}", cwd=cwd)
+    if override:
+        return override
+    try:
+        full = _run("rev-parse", "--symbolic-full-name", "@{u}", cwd=cwd)
+    except subprocess.CalledProcessError as e:
+        raise NoUpstreamError(branchname(cwd=cwd)) from e
     if full.startswith("refs/remotes/"):
         return _run("rev-parse", "--abbrev-ref", full, cwd=cwd)
     if full.startswith("refs/heads/"):
@@ -56,9 +83,9 @@ def range_base(*, cwd: Path | None = None) -> str:
     return branchname("@{u}", cwd=cwd)
 
 
-def rev_range(*, cwd: Path | None = None) -> str:
+def rev_range(*, cwd: Path | None = None, override: str | None = None) -> str:
     """Return 'base..HEAD' range string."""
-    return f"{range_base(cwd=cwd)}..HEAD"
+    return f"{range_base(cwd=cwd, override=override)}..HEAD"
 
 
 def diff_tree(rev: str, *, cwd: Path | None = None) -> str:

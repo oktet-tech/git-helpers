@@ -117,6 +117,25 @@ class TestSyncDryRun:
         assert "[1/" in out
         assert "[2/" in out
 
+    def test_upstream_override_no_upstream(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """rbt-sync --upstream works on a branch without @{u}."""
+        git_repo.git("checkout", "-b", "no-upstream")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d", "--upstream", "origin/master")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+
+    def test_missing_upstream_friendly_error(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        git_repo.git("checkout", "-b", "no-upstream")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "upstream" in r.stderr.lower()
+
 
 class TestSyncExecution:
     def test_update_posts_changed_only(

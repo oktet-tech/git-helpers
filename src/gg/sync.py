@@ -41,6 +41,10 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[
                    help="forget old reviews, post current commits as a fresh series")
     p.add_argument("--close", action="store_true",
                    help="close all reviews as submitted and clear DB")
+    p.add_argument(
+        "--upstream", default=None, metavar="REF",
+        help="override @{u} for both the diff base and rbt's --tracking-branch",
+    )
     p.add_argument("range", nargs="?", default=None, help="revision range (default: tracking..HEAD)")
     p.set_defaults(func=run)
 
@@ -205,7 +209,6 @@ def run(args: argparse.Namespace) -> int:
     """Execute the rbt-sync subcommand."""
     cwd = Path.cwd()
     branch_name = git.branchname(cwd=cwd)
-    tracking = git.tracking_branch(cwd=cwd)
 
     if args.close:
         old = review_store.load_reviews(branch_name, cwd=cwd)
@@ -222,7 +225,16 @@ def run(args: argparse.Namespace) -> int:
         print(f"Closed {len(old)} review(s) as submitted.", file=sys.stderr)
         return 0
 
-    range_spec = args.range or git.rev_range(cwd=cwd)
+    try:
+        tracking = git.tracking_branch(cwd=cwd, override=args.upstream)
+        range_spec = args.range or git.rev_range(cwd=cwd, override=args.upstream)
+    except git.NoUpstreamError as e:
+        print(
+            f"[gg] {e}. Set one with `git branch --set-upstream-to=<ref>` "
+            f"or pass `--upstream <ref>`.",
+            file=sys.stderr,
+        )
+        return 1
     revs = git.list_revs(range_spec, cwd=cwd)
 
     if not revs:

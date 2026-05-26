@@ -45,6 +45,27 @@ class TestPostOneDryRun:
         r = git_repo.run_gg("rbt", "-d", "--depends-on", "9999")
         assert "--depends-on=9999" in r.stdout
 
+    def test_upstream_override_no_upstream(
+        self, git_repo: GitRepo, rbt_mock: RbtMock
+    ) -> None:
+        """--upstream lets a branch without @{u} be posted."""
+        git_repo.git("checkout", "-b", "no-upstream")
+        git_repo.commit("BUG-7: needs override")
+        r = git_repo.run_gg("rbt", "-d", "--upstream", "origin/master")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert "--tracking-branch=origin/master" in r.stdout
+
+    def test_missing_upstream_friendly_error(
+        self, git_repo: GitRepo, rbt_mock: RbtMock
+    ) -> None:
+        """Without --upstream and without @{u}, we want a friendly error, not a traceback."""
+        git_repo.git("checkout", "-b", "no-upstream")
+        git_repo.commit("BUG-8: oops")
+        r = git_repo.run_gg("rbt", "-d")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "upstream" in r.stderr.lower()
+
 
 class TestGgRbt:
     def test_single_commit_no_numbering(

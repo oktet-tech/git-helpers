@@ -55,3 +55,27 @@ class TestRangeBase:
         git_repo.create_branch("a", "master")
         git_repo.create_branch("b", "a")
         assert git.range_base(cwd=git_repo.work_dir) == "a"
+
+
+class TestUpstreamOverride:
+    def test_tracking_branch_override_skips_git(self, git_repo: GitRepo) -> None:
+        """override= short-circuits and does not require an upstream to be set."""
+        git_repo.git("checkout", "-b", "no-upstream")
+        # Sanity: branch genuinely has no upstream
+        r = git_repo.git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+        assert r.returncode != 0
+        assert git.tracking_branch(
+            cwd=git_repo.work_dir, override="oktet/main"
+        ) == "oktet/main"
+
+    def test_range_base_override(self, git_repo: GitRepo) -> None:
+        git_repo.git("checkout", "-b", "no-upstream")
+        assert git.range_base(
+            cwd=git_repo.work_dir, override="origin/master"
+        ) == "origin/master"
+
+    def test_rev_range_override(self, git_repo: GitRepo) -> None:
+        git_repo.git("checkout", "-b", "no-upstream")
+        assert git.rev_range(
+            cwd=git_repo.work_dir, override="origin/master"
+        ) == "origin/master..HEAD"

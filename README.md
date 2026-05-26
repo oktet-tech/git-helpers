@@ -62,6 +62,7 @@ operations support `-d`/`--dry` for dry-run.
 | `git gg rbt-sync -f` | Re-post every matched commit, ignoring the diff-hash cache |
 | `git gg rbt-sync --new` | Forget old reviews and post the current commits as a fresh series |
 | `git gg rbt-sync --close` | Close all reviews as submitted and clear the DB |
+| `git gg rbt-sync --upstream <ref>` | Override `@{u}` for the diff base and `--tracking-branch` (also on `gg rbt`) |
 | `git gg publish` | Publish drafts of every review request on the current branch |
 | `git gg rbt-import` | Import an existing ReviewBoard chain into `reviews.db` |
 | `git gg db` | Inspect and manage `.gg/reviews.db` (list/clear/reinit) |

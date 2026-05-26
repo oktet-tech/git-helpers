@@ -36,6 +36,10 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[
         "-D", "--depends-on", default=None, metavar="ID",
         help="first patch depends on review request ID",
     )
+    p.add_argument(
+        "--upstream", default=None, metavar="REF",
+        help="override @{u} for both the diff base and rbt's --tracking-branch",
+    )
     p.add_argument("range", nargs="?", default=None, help="revision range (default: tracking..HEAD)")
     p.set_defaults(func=run)
 
@@ -60,14 +64,21 @@ def run(args: argparse.Namespace) -> int:
     reviewers = args.users if first_post else []
     groups = args.groups if first_post else []
 
-    range_spec = args.range or git.rev_range(cwd=cwd)
+    try:
+        range_spec = args.range or git.rev_range(cwd=cwd, override=args.upstream)
+        tracking = git.tracking_branch(cwd=cwd, override=args.upstream)
+    except git.NoUpstreamError as e:
+        print(
+            f"[gg] {e}. Set one with `git branch --set-upstream-to=<ref>` "
+            f"or pass `--upstream <ref>`.",
+            file=sys.stderr,
+        )
+        return 1
     revs = git.list_revs(range_spec, cwd=cwd)
 
     if not revs:
         print("No commits to post.")
         return 1
-
-    tracking = git.tracking_branch(cwd=cwd)
     continue_from = args.continue_from
     total = len(revs) + continue_from
     depends = args.depends_on
