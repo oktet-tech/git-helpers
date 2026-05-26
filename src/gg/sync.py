@@ -257,6 +257,15 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.adopt:
+        existing = review_store.load_reviews(branch_name, cwd=cwd)
+        if existing and not args.adopt_overwrite:
+            print(
+                f"[gg] branch '{branch_name}' already has {len(existing)} reviews; "
+                f"pass --adopt-overwrite to replace",
+                file=sys.stderr,
+            )
+            return 1
     if not args.adopt and not old and not args.new:
         print(
             "[gg] No existing reviews; posting as a fresh series.",

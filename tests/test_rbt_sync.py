@@ -972,3 +972,18 @@ class TestSyncAdopt:
         assert r.returncode != 0
         assert "Traceback" not in r.stderr
         assert "nothing-here" in r.stderr
+
+    def test_adopt_conflict_refuses_without_overwrite(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """If branchB already has DB rows, --adopt refuses without --adopt-overwrite."""
+        self._setup_two_branches(git_repo)
+        # Seed branchB with its own DB rows by posting independently.
+        _post_series(git_repo)
+        assert git_repo.git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "branchB"
+
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "branchA")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "adopt-overwrite" in r.stderr
+        assert "branchB" in r.stderr
