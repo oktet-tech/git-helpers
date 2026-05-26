@@ -1066,3 +1066,21 @@ class TestSyncAdopt:
         # branchA's rows are untouched.
         a_after = review_store.load_reviews("branchA", cwd=git_repo.work_dir)
         assert [e.review_id for e in a_after] == a_review_ids
+
+    def test_adopt_dry_writes_nothing(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--adopt --dry reads SRC but does not mutate either branch's DB rows."""
+        self._setup_two_branches(git_repo)
+        from gg import review_store
+        a_before = review_store.load_reviews("branchA", cwd=git_repo.work_dir)
+        b_before = review_store.load_reviews("branchB", cwd=git_repo.work_dir)
+        assert b_before == []  # branchB has no rows yet
+
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "branchA")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+
+        a_after = review_store.load_reviews("branchA", cwd=git_repo.work_dir)
+        b_after = review_store.load_reviews("branchB", cwd=git_repo.work_dir)
+        assert a_after == a_before
+        assert b_after == []
