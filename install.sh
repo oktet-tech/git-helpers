@@ -22,10 +22,30 @@ install_gg_cli() {
     fi
 }
 
-if [ "$1" = "--gg" ]; then
-    install_gg_cli
-    exit 0
-fi
+usage() {
+    cat <<EOF
+Usage: install.sh [OPTION]
+
+Install git-helpers: symlink ~/.bashrc.gitgo and install the gg CLI via uv,
+then print the gitconfig and .bashrc snippets to add manually.
+
+Options:
+  (no args)   Full install: ~/.bashrc.gitgo symlink + gg CLI + print snippets
+  --gg        Only (re)install the gg CLI via 'uv tool install -e'
+  -h, --help  Show this help and exit
+EOF
+}
+
+case "$1" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    --gg)
+        install_gg_cli
+        exit 0
+        ;;
+esac
 
 echo "Install .bashrc.gitgo"
 try rm -f ~/.bashrc.gitgo
