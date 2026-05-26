@@ -987,3 +987,18 @@ class TestSyncAdopt:
         assert "Traceback" not in r.stderr
         assert "adopt-overwrite" in r.stderr
         assert "branchB" in r.stderr
+
+    def test_adopt_overwrite_proceeds(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--adopt-overwrite lets us replace existing rows on the target branch."""
+        self._setup_two_branches(git_repo)
+        _post_series(git_repo)  # branchB gets its own DB rows
+        assert git_repo.git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "branchB"
+
+        r = git_repo.run_gg(
+            "rbt-sync", "-d", "--adopt", "branchA", "--adopt-overwrite",
+        )
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        # Dry-run with identical diffs → all keep
+        assert "keep" in r.stdout
