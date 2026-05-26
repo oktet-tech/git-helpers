@@ -218,6 +218,19 @@ def run(args: argparse.Namespace) -> int:
     cwd = Path.cwd()
     branch_name = git.branchname(cwd=cwd)
 
+    if args.adopt_overwrite and not args.adopt:
+        print("[gg] --adopt-overwrite requires --adopt", file=sys.stderr)
+        return 1
+    if args.adopt and (args.new or args.close):
+        print("[gg] --adopt is incompatible with --new/--close", file=sys.stderr)
+        return 1
+    if args.adopt == branch_name:
+        print(
+            f"[gg] cannot adopt from current branch '{branch_name}'",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.close:
         old = review_store.load_reviews(branch_name, cwd=cwd)
         if not old:

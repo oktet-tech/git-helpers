@@ -1002,3 +1002,33 @@ class TestSyncAdopt:
         assert r.returncode == 0, f"stderr: {r.stderr}"
         # Dry-run with identical diffs → all keep
         assert "keep" in r.stdout
+
+    def test_adopt_self_branch_errors(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "feature")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "current branch" in r.stderr
+
+    def test_adopt_incompatible_with_new(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        git_repo.create_branch("branchB", "master")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "branchA", "--new")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "incompatible" in r.stderr.lower()
+
+    def test_adopt_overwrite_without_adopt_errors(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        git_repo.create_branch("branchB", "master")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt-overwrite")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "--adopt" in r.stderr
