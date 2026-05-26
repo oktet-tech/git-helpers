@@ -42,6 +42,14 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[
     p.add_argument("--close", action="store_true",
                    help="close all reviews as submitted and clear DB")
     p.add_argument(
+        "--adopt", metavar="SRC", default=None,
+        help="reconcile against SRC branch's reviews; save under current branch",
+    )
+    p.add_argument(
+        "--adopt-overwrite", action="store_true",
+        help="(with --adopt) overwrite current branch's existing rows",
+    )
+    p.add_argument(
         "--upstream", default=None, metavar="REF",
         help="override @{u} for both the diff base and rbt's --tracking-branch",
     )
@@ -241,8 +249,9 @@ def run(args: argparse.Namespace) -> int:
         print("No commits in range.")
         return 1
 
-    old = review_store.load_reviews(branch_name, cwd=cwd)
-    if not old and not args.new:
+    source_branch = args.adopt or branch_name
+    old = review_store.load_reviews(source_branch, cwd=cwd)
+    if not args.adopt and not old and not args.new:
         print(
             "[gg] No existing reviews; posting as a fresh series.",
             file=sys.stderr,

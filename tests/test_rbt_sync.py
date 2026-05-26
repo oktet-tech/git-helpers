@@ -931,3 +931,33 @@ class TestForceFlag:
         r = git_repo.run_gg("rbt-sync", "-f", "-d")
         assert r.returncode == 0
         assert "Force: yes" in r.stdout
+
+
+class TestSyncAdopt:
+    def _setup_two_branches(self, git_repo: GitRepo) -> None:
+        """branchA tracks master with two commits posted; branchB tracks master with the same commits cherry-picked."""
+        git_repo.create_branch("branchA", "master")
+        git_repo.commit("fix crash")
+        git_repo.commit("add tests")
+        _post_series(git_repo)
+        # Capture branchA's HEAD revs to cherry-pick
+        full_revs = git_repo.git(
+            "log", "--reverse", "--format=%H", "master..HEAD"
+        ).stdout.strip().splitlines()
+        git_repo.git("checkout", "master")
+        git_repo.create_branch("branchB", "master")
+        for rev in full_revs:
+            git_repo.git("cherry-pick", rev)
+
+    def test_adopt_keep_unchanged(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """branchB has the same diffs as branchA → adopt produces all-keep plan."""
+        self._setup_two_branches(git_repo)
+        calls_before = rbt_mock.call_count()
+
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "branchA")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert "keep" in r.stdout
+        # Dry-run + identical diffs → no rbt calls at all
+        assert rbt_mock.call_count() == calls_before
