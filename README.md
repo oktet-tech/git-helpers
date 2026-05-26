@@ -63,6 +63,8 @@ operations support `-d`/`--dry` for dry-run.
 | `git gg rbt-sync --new` | Forget old reviews and post the current commits as a fresh series |
 | `git gg rbt-sync --close` | Close all reviews as submitted and clear the DB |
 | `git gg rbt-sync --upstream <ref>` | Override `@{u}` for the diff base and `--tracking-branch` (also on `gg rbt`) |
+| `git gg rbt-sync --adopt branchA` | Reconcile against `branchA`'s reviews and save under the current branch |
+| `git gg rbt-sync --adopt branchA --adopt-overwrite` | Same, but overwrite the current branch's existing DB rows |
 | `git gg publish` | Publish drafts of every review request on the current branch |
 | `git gg rbt-import` | Import an existing ReviewBoard chain into `reviews.db` |
 | `git gg db` | Inspect and manage `.gg/reviews.db` (list/clear/reinit) |
@@ -269,6 +271,29 @@ git checkout master
 git reset --keep HEAD~1
 git checkout bug239
 ```
+
+### Refactoring with the original branch as a reference
+
+When you want to keep the original branch around while reworking the
+same series on a new branch — for example to compare an original vs
+a cleaned-up version — create the new branch tracking the same
+upstream and use `--adopt`:
+
+```shell
+# branchA: posted to RB, got feedback
+git checkout master
+git gowork branchB              # new branch tracking origin/main
+git cherry-pick branchA~1 branchA
+# edit, amend, reorder...
+
+git gg rbt-sync --adopt branchA
+```
+
+After adopt, branchB owns the review thread; subsequent
+`gg rbt-sync` runs on branchB no longer need `--adopt`. branchA's
+DB rows are read-only during adopt and remain in place, but they
+still reference the review IDs you just updated — treat branchA as
+frozen, and don't run `gg rbt-sync` from it again.
 
 Running tests
 -------------
