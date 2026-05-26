@@ -218,6 +218,9 @@ def run(args: argparse.Namespace) -> int:
     cwd = Path.cwd()
     branch_name = git.branchname(cwd=cwd)
 
+    if args.adopt is not None and not args.adopt.strip():
+        print("[gg] --adopt requires a branch name", file=sys.stderr)
+        return 1
     if args.adopt_overwrite and not args.adopt:
         print("[gg] --adopt-overwrite requires --adopt", file=sys.stderr)
         return 1

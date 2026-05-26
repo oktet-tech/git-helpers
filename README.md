@@ -283,7 +283,7 @@ upstream and use `--adopt`:
 # branchA: posted to RB, got feedback
 git checkout master
 git gowork branchB              # new branch tracking origin/main
-git cherry-pick branchA~1 branchA
+git cherry-pick master..branchA   # replay branchA's whole series
 # edit, amend, reorder...
 
 git gg rbt-sync --adopt branchA

@@ -1033,6 +1033,17 @@ class TestSyncAdopt:
         assert "Traceback" not in r.stderr
         assert "--adopt" in r.stderr
 
+    def test_adopt_empty_string_errors(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--adopt '' is a usage error, not a silent fallback to plain rbt-sync."""
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "branch name" in r.stderr
+
     def test_adopt_update_amended(
         self, git_repo: GitRepo, rbt_mock: RbtMock,
     ) -> None:
