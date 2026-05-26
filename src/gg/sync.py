@@ -251,6 +251,12 @@ def run(args: argparse.Namespace) -> int:
 
     source_branch = args.adopt or branch_name
     old = review_store.load_reviews(source_branch, cwd=cwd)
+    if args.adopt and not old:
+        print(
+            f"[gg] no reviews to adopt from branch '{args.adopt}'",
+            file=sys.stderr,
+        )
+        return 1
     if not args.adopt and not old and not args.new:
         print(
             "[gg] No existing reviews; posting as a fresh series.",

@@ -961,3 +961,14 @@ class TestSyncAdopt:
         assert "keep" in r.stdout
         # Dry-run + identical diffs → no rbt calls at all
         assert rbt_mock.call_count() == calls_before
+
+    def test_adopt_empty_source_errors(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--adopt against a branch with no DB rows is a friendly error, not a traceback."""
+        git_repo.create_branch("branchB", "master")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt-sync", "-d", "--adopt", "nothing-here")
+        assert r.returncode != 0
+        assert "Traceback" not in r.stderr
+        assert "nothing-here" in r.stderr
