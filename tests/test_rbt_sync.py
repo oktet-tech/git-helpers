@@ -1032,3 +1032,37 @@ class TestSyncAdopt:
         assert r.returncode != 0
         assert "Traceback" not in r.stderr
         assert "--adopt" in r.stderr
+
+    def test_adopt_update_amended(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """Amend a branchB commit; --adopt branchA updates the same RB review IDs."""
+        self._setup_two_branches(git_repo)
+        from gg import review_store
+        a_entries = review_store.load_reviews("branchA", cwd=git_repo.work_dir)
+        assert len(a_entries) == 2
+        a_review_ids = [e.review_id for e in a_entries]
+
+        # Amend branchB's last commit so its diff differs from branchA's.
+        (git_repo.work_dir / "amended").write_text("amended\n")
+        git_repo.git("add", "amended")
+        git_repo.git("commit", "--amend", "--no-edit")
+
+        calls_before = rbt_mock.call_count()
+        r = git_repo.run_gg("rbt-sync", "--adopt", "branchA")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+
+        # Exactly one `rbt post -r <ID>` call against the last review ID.
+        new_calls = rbt_mock.calls()[calls_before:]
+        update_calls = [c for c in new_calls if "-r" in c]
+        assert len(update_calls) == 1
+        idx = update_calls[0].index("-r")
+        assert update_calls[0][idx + 1] == a_review_ids[1]
+
+        # branchB now has its own DB rows pointing at the same review IDs as branchA.
+        b_entries = review_store.load_reviews("branchB", cwd=git_repo.work_dir)
+        assert [e.review_id for e in b_entries] == a_review_ids
+
+        # branchA's rows are untouched.
+        a_after = review_store.load_reviews("branchA", cwd=git_repo.work_dir)
+        assert [e.review_id for e in a_after] == a_review_ids

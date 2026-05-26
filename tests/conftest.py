@@ -201,6 +201,7 @@ else:
     people = []
     groups = []
     summary = ""
+    update_id = None
     i = 0
     while i < len(args):
         if args[i] == "--target-people" and i + 1 < len(args):
@@ -212,8 +213,14 @@ else:
         elif args[i].startswith("--summary="):
             summary = args[i].split("=", 1)[1]
             i += 1
+        elif args[i] == "-r" and i + 1 < len(args):
+            update_id = args[i + 1]
+            i += 2
         else:
             i += 1
+    # When updating an existing review (-r ID), keep the same review ID.
+    if update_id is not None:
+        rid = int(update_id)
     state = {"people": people, "groups": groups, "summary": summary}
     state_file = os.path.join(STATE_DIR, str(rid) + ".json")
     with open(state_file, "w") as f:
