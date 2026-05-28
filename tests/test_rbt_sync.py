@@ -136,6 +136,25 @@ class TestSyncDryRun:
         assert "Traceback" not in r.stderr
         assert "upstream" in r.stderr.lower()
 
+    def test_plan_pub_column_tracks_published_state(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        import re as _re
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        _post_series(git_repo)  # draft, published=0
+
+        # Unpublished draft under -p → plan shows "keep ... yes"
+        r = git_repo.run_gg("rbt-sync", "-d", "-p")
+        assert r.returncode == 0
+        assert _re.search(r"keep\s+yes", _plain(r.stdout)), _plain(r.stdout)
+
+        # Publish it, then the plan shows "keep ... --"
+        git_repo.run_gg("rbt-sync", "-p")
+        r = git_repo.run_gg("rbt-sync", "-d", "-p")
+        assert r.returncode == 0
+        assert _re.search(r"keep\s+--", _plain(r.stdout)), _plain(r.stdout)
+
 
 class TestSyncExecution:
     def test_update_posts_changed_only(
@@ -285,7 +304,7 @@ class TestPlanPublishColumn:
     def test_publish_flag_shows_yes(
         self, git_repo: GitRepo, rbt_mock: RbtMock,
     ) -> None:
-        """With -p -d, update/create rows show 'yes', keep rows show '--'."""
+        """With -p -d, update/create rows and unpublished-draft KEEP rows show 'yes'."""
         git_repo.create_branch("feature", "master")
         git_repo.commit("fix crash")
         git_repo.commit("add tests")
@@ -300,10 +319,10 @@ class TestPlanPublishColumn:
         assert r.returncode == 0
         out = r.stdout
         assert "Pub" in out
-        # keep row has '--', update row has 'yes'
+        # Both keep (unpublished draft) and update rows show 'yes' under -p
         for line in out.splitlines():
             if "keep" in line and "keep+dep" not in line:
-                assert "--" in line
+                assert "yes" in line
             if "update" in line:
                 assert "yes" in line
 

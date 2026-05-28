@@ -13,11 +13,23 @@ def _will_post(action: SyncAction) -> bool:
     return action.kind in (ActionKind.UPDATE, ActionKind.CREATE) or action.needs_dep_update
 
 
+def _will_publish_keep(action: SyncAction, publish: bool) -> bool:
+    """True if a KEEP review will be published (it is an unpublished draft)."""
+    return (
+        publish
+        and action.kind == ActionKind.KEEP
+        and action.old_entry is not None
+        and not action.old_entry.published
+    )
+
+
 def _pub_label(action: SyncAction, publish: bool) -> str:
     """Pub column value for an action."""
-    if not _will_post(action):
-        return "--"
-    return "yes" if publish else "draft"
+    if _will_post(action):
+        return "yes" if publish else "draft"
+    if _will_publish_keep(action, publish):
+        return "yes"
+    return "--"
 
 
 def _format_reviewer_header(
@@ -49,7 +61,9 @@ def format_plan(
 ) -> str:
     """Format sync actions as a human-readable plan table."""
     numbered = assign_numbers(actions, renumber=renumber)
-    show_pub = any(_will_post(a) for a in actions)
+    show_pub = any(_will_post(a) or _will_publish_keep(a, publish) for a in actions) or (
+        publish and any(a.kind == ActionKind.KEEP for a in actions)
+    )
 
     if show_pub:
         header = f"{'#':<10} {'Action':<12} {'Pub':<7} {'Review':<10} Subject"
