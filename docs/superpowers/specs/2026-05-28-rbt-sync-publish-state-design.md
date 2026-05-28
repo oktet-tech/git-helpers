@@ -60,10 +60,20 @@ CREATE TABLE IF NOT EXISTS reviews (
 
 **Migration.** On connect, after the `CREATE TABLE IF NOT EXISTS`, run
 `PRAGMA table_info(reviews)`; if `published` is absent,
-`ALTER TABLE reviews ADD COLUMN published INTEGER NOT NULL DEFAULT 0`.
-Existing rows become `0` (treated as drafts). The first `-p` run after
-upgrade attempts to publish them; already-published ones are absorbed by
-the soft-handle (below) and marked `1`, so the state self-heals.
+`ALTER TABLE reviews ADD COLUMN published INTEGER NOT NULL DEFAULT 1`.
+Pre-existing rows predate this feature and are almost always already
+published on RB, so they become `1` (assumed published). This avoids a
+noisy first `-p` run that would otherwise attempt to re-publish every
+legacy review. The trade-off: a genuinely-unpublished legacy draft will
+be skipped by `rbt-sync -p` until its diff changes (an UPDATE re-posts a
+fresh draft with `published=0`) or the user runs `gg publish` to force a
+publish.
+
+Note the two defaults differ intentionally: the `CREATE TABLE` column
+default is `0` (a brand-new DB's notional "unset" row is an unpublished
+draft), while the migration `ALTER` backfills legacy rows with `1`. In
+normal operation neither default is actually relied upon — every code
+path that inserts a row sets `published` explicitly.
 
 **Meaning:** "the latest posted state of this review has been
 published."
@@ -138,7 +148,7 @@ web-UI publishes, and `gg publish` over already-public reviews.
 
 1. **`review_store`**: round-trips `published`; migration adds the column
    to a pre-existing DB created without it (existing rows read back as
-   `published=0`).
+   `published=1`).
 2. **KEEP + `-p`, draft**: entry `published=0` → exactly one `rbt publish`
    call; row afterward has `published=1`.
 3. **KEEP + `-p`, already published**: entry `published=1` → zero
@@ -166,7 +176,8 @@ recorded draft on a branch.
 ## Migration / compatibility
 
 - Schema change is additive and self-applied on first connect; no manual
-  migration step.
+  migration step. Legacy rows are backfilled as `published=1`, so an
+  upgraded branch's already-published reviews are not re-published.
 - Behavior change: `gg rbt-sync -p` no longer re-publishes
   already-published KEEP reviews. The previously-documented "publishes
   unchanged drafts" wording is refined — it publishes *unpublished*
