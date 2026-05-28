@@ -52,3 +52,24 @@ class TestPublishMarksState:
         assert r.returncode == 0
         entries = review_store.load_reviews("feature", cwd=git_repo.work_dir)
         assert entries and all(e.published for e in entries)
+
+
+class TestPublishAlreadyPublished:
+    def test_api_100_is_soft_no_op(self, git_repo, rbt_mock) -> None:
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        r = git_repo.run_gg("rbt")  # seed one draft
+        assert r.returncode == 0
+
+        rbt_mock.queue_failure(
+            output=(
+                "ERROR: Error publishing review request (it may already be "
+                "published): Object does not exist (API Error 100: Does Not "
+                "Exist)\n"
+            ),
+            returncode=1,
+            count=1,
+        )
+        r = git_repo.run_gg("publish")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert "already published" in r.stderr
