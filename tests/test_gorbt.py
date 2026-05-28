@@ -504,3 +504,27 @@ class TestForceFlag:
         # No separate rbt publish invocations
         publish_calls = [x for x in new_calls if x and x[0] == "publish"]
         assert publish_calls == []
+
+
+class TestRbtPublishedFlag:
+    def test_post_without_publish_records_draft(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        from gg import review_store
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("BUG-1: fix crash")
+        git_repo.run_gg("rbt")  # no -p
+        e = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        assert len(e) == 1
+        assert e[0].published is False
+
+    def test_post_with_publish_records_published(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        from gg import review_store
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("BUG-1: fix crash")
+        git_repo.run_gg("rbt", "-p")
+        e = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        assert len(e) == 1
+        assert e[0].published is True
