@@ -30,3 +30,25 @@ class TestGopublish:
         r = git_repo.run_gitgo("git_gopublish", "-h")
         assert r.returncode == 0
         assert "gopublish" in r.stdout or "publish" in r.stdout.lower()
+
+
+class TestPublishMarksState:
+    def test_publish_marks_entries_published(
+        self, git_repo: GitRepo, rbt_mock,
+    ) -> None:
+        from gg import review_store
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        git_repo.commit("add tests")
+        # Seed drafts via gg rbt (no -p)
+        r = git_repo.run_gg("rbt")
+        assert r.returncode == 0
+        assert all(
+            not e.published
+            for e in review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        )
+
+        r = git_repo.run_gg("publish")
+        assert r.returncode == 0
+        entries = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        assert entries and all(e.published for e in entries)

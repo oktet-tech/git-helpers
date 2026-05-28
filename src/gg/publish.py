@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from gg import git, review_store
@@ -41,10 +42,16 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     failures = 0
+    updated: list[review_store.ReviewEntry] = []
     for e in entries:
         rc = publish_one(e.review_id, dry_run=False, verbose=args.verbose, cwd=cwd)
-        if rc != 0:
+        if rc == 0:
+            updated.append(replace(e, published=True))
+        else:
             failures += 1
+            updated.append(e)
+
+    review_store.save_reviews(updated, cwd=cwd)
 
     if failures:
         print(f"[gg] {failures} of {len(entries)} publish call(s) failed.", file=sys.stderr)
