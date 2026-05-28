@@ -212,8 +212,12 @@ git gg rbt
 git gg publish
 ```
 
-`gg rbt -u --publish` and `gg rbt-sync -p` also publish unchanged
-drafts (in addition to creating/updating reviews whose diff changed).
+`gg rbt-sync -p` publishes the reviews it creates or updates, plus any
+unchanged (KEEP) reviews that are still sitting as unpublished drafts.
+Reviews that are already published are left untouched -- a repeat
+`gg rbt-sync -p` over a published branch makes no publish calls. gg
+tracks per-review publish state in `reviews.db`; `gg publish` remains
+the way to (re)publish every recorded draft on a branch.
 
 ### Importing an existing ReviewBoard chain
 
