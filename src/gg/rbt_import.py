@@ -128,6 +128,7 @@ def run(args: argparse.Namespace) -> int:
             review_id=review_id,
             subject=subject,
             diff_hash=h,
+            published=True,
         ))
 
     print(_format_table(

@@ -293,6 +293,28 @@ class TestImport:
         lines = [l for l in r.stdout.splitlines() if "r/950" in l]
         assert len(lines) == 1
 
+    def test_import_marks_entries_published(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """Imported entries are recorded with published=True."""
+        _write_api_mock(rbt_mock, {
+            "400": {"summary": "fix crash", "blocks": ["401"]},
+            "401": {"summary": "add tests", "blocks": ["402"]},
+            "402": {"summary": "update docs", "blocks": []},
+        })
+
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        git_repo.commit("add tests")
+        git_repo.commit("update docs")
+
+        r = git_repo.run_gg("rbt-import", "400")
+        assert r.returncode == 0
+
+        from gg import review_store
+        entries = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        assert entries and all(e.published for e in entries)
+
 
 class TestImportReviewers:
     def test_import_shows_reviewers(
