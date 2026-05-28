@@ -809,6 +809,27 @@ class TestPublishUnchangedOnSync:
         new_calls = rbt_mock.calls()[initial_calls:]
         assert [c for c in new_calls if c and c[0] == "publish"] == []
 
+    def test_keep_publish_skips_already_published(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """First -p publishes the drafts; a second -p makes no publish call."""
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("fix crash")
+        git_repo.commit("add tests")
+        _post_series(git_repo)  # gg rbt without -p → drafts (published=0)
+
+        n0 = rbt_mock.call_count()
+        r = git_repo.run_gg("rbt-sync", "-p")
+        assert r.returncode == 0
+        pub1 = [c for c in rbt_mock.calls()[n0:] if c and c[0] == "publish"]
+        assert len(pub1) == 2  # both drafts published
+
+        n1 = rbt_mock.call_count()
+        r = git_repo.run_gg("rbt-sync", "-p")
+        assert r.returncode == 0
+        pub2 = [c for c in rbt_mock.calls()[n1:] if c and c[0] == "publish"]
+        assert pub2 == []  # already published → no re-publish
+
 
 class TestEmptyReviewIdRecovery:
     """When reviews.db has entries with empty review_id (a previous post

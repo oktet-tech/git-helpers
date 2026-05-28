@@ -122,20 +122,25 @@ def _execute(
                 and not action.needs_dep_update
                 and (not renumber
                      or _number_matches(action.old_entry, num_str, old_total))):
-            # Nothing about the commit changed. If --publish was requested,
-            # still publish the (possibly draft) review request.
+            # Nothing about the commit changed. With --publish, publish the
+            # review only if it is still an unpublished draft; an already
+            # published review is left untouched.
             assert action.old_entry is not None
-            if publish:
-                publish_one(
+            entry_published = bool(action.old_entry.published)
+            if publish and not entry_published:
+                rc = publish_one(
                     action.old_entry.review_id,
                     dry_run=dry_run, verbose=verbose, cwd=cwd,
                 )
+                if rc == 0:
+                    entry_published = True
             entries.append(review_store.ReviewEntry(
                 branch=branch_name,
                 position=len(entries) + 1,
                 review_id=action.old_entry.review_id,
                 subject=review_store.strip_prefix(action.new_commit.subject),
                 diff_hash=action.new_commit.diff_hash,
+                published=entry_published,
             ))
             prev_review_id = action.old_entry.review_id
             continue
@@ -195,6 +200,7 @@ def _execute(
             review_id=rid or "",
             subject=review_store.strip_prefix(action.new_commit.subject),
             diff_hash=action.new_commit.diff_hash,
+            published=bool(publish),
         ))
         prev_review_id = rid
 
@@ -354,6 +360,7 @@ def run(args: argparse.Namespace) -> int:
                 review_id=a.old_entry.review_id,
                 subject=a.old_entry.subject,
                 diff_hash=a.old_entry.diff_hash,
+                published=bool(a.old_entry.published),
             ))
 
     print(_format_summary(actions), file=sys.stderr)
