@@ -114,7 +114,6 @@ class TestPublishedFlag:
         assert e.published is False
 
     def test_migration_backfills_existing_rows_as_published(self, git_repo) -> None:
-        import sqlite3
         from gg import review_store
         db = git_repo.work_dir / ".gg" / "reviews.db"
         db.parent.mkdir(parents=True, exist_ok=True)
