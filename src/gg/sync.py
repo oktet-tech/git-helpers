@@ -29,6 +29,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[
     p.add_argument("--renumber", action="store_true", help="full renumber instead of fractional")
     p.add_argument("-p", "--publish", action="store_true", help="publish new/updated requests")
     p.add_argument("-v", "--verbose", action="store_true", help="show rbt output")
+    p.add_argument("--progress", action="store_true", help="print one line per action")
     p.add_argument(
         "-D", "--depends-on", default=None, metavar="ID",
         help="first patch depends on this review request ID",
@@ -81,6 +82,7 @@ def _execute(
     renumber: bool,
     publish: bool,
     verbose: bool,
+    progress: bool,
     dry_run: bool,
     explicit_branch: str | None,
     initial_depends: str | None,
@@ -99,6 +101,12 @@ def _execute(
     # Phase 1: discard removed reviews
     for action, _ in numbered:
         if action.kind == ActionKind.DISCARD and action.old_entry:
+            if progress:
+                print(
+                    f"{_BOLD}discard r/{action.old_entry.review_id}: "
+                    f"{action.old_entry.subject}{_RESET}",
+                    flush=True,
+                )
             close_discarded(
                 action.old_entry.review_id,
                 dry_run=dry_run, verbose=verbose, cwd=cwd,
@@ -109,7 +117,16 @@ def _execute(
     prev_review_id = initial_depends
 
     for action, num_str in numbered:
-        if action.kind in (ActionKind.DISCARD, ActionKind.SKIP):
+        if action.kind == ActionKind.DISCARD:
+            continue
+        if action.kind == ActionKind.SKIP:
+            if progress:
+                subj = (
+                    action.new_commit.subject if action.new_commit
+                    else action.old_entry.subject if action.old_entry
+                    else ""
+                )
+                print(f"{_BOLD}skip: {subj}{_RESET}")
             continue
 
         assert action.new_commit is not None
@@ -134,6 +151,8 @@ def _execute(
                 )
                 if rc == 0:
                     entry_published = True
+            elif progress:
+                print(f"{_BOLD}keep (unchanged): {action.new_commit.subject}{_RESET}")
             entries.append(review_store.ReviewEntry(
                 branch=branch_name,
                 position=len(entries) + 1,
@@ -153,6 +172,13 @@ def _execute(
             action.kind == ActionKind.CREATE
             or (action.old_entry is not None and not action.old_entry.review_id)
         )
+
+        if progress:
+            pos = f" {num_str}" if num_str != "--" else ""
+            print(
+                f"{_BOLD}posting{pos}: {action.new_commit.subject} ...{_RESET}",
+                flush=True,
+            )
 
         if needs_fresh_post:
             if reviewers is not None or groups is not None:
@@ -193,6 +219,10 @@ def _execute(
                 cwd=cwd,
             )
             rid = result.review_id or action.old_entry.review_id
+
+        if progress and rid:
+            verb = "created" if needs_fresh_post else "updated"
+            print(f"{_BOLD}  -> {verb} r/{rid}{_RESET}")
 
         entries.append(review_store.ReviewEntry(
             branch=branch_name,
@@ -342,6 +372,7 @@ def run(args: argparse.Namespace) -> int:
         renumber=args.renumber,
         publish=args.publish,
         verbose=args.verbose,
+        progress=args.progress or args.verbose,
         dry_run=False,
         explicit_branch=args.branch,
         initial_depends=args.depends_on,

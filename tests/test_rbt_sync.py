@@ -1172,3 +1172,72 @@ class TestSyncAdopt:
         b_after = review_store.load_reviews("branchB", cwd=git_repo.work_dir)
         assert a_after == a_before
         assert b_after == []
+
+
+class TestProgress:
+    def test_progress_prints_per_action_lines(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--progress emits one prose line per entry: keep/update/discard/create."""
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("alpha")        # will stay KEEP
+        git_repo.commit("beta")         # will be amended -> UPDATE
+        git_repo.commit("gamma")        # will be dropped -> DISCARD
+        _post_series(git_repo)
+
+        # Drop gamma, amend beta, add delta -> series is alpha, beta', delta
+        git_repo.git("reset", "--hard", "HEAD~1")           # drop gamma
+        (git_repo.work_dir / "extra").write_text("changed\n")
+        git_repo.git("add", "extra")
+        git_repo.git("commit", "--amend", "--no-edit")      # amend beta
+        git_repo.commit("delta")                            # new -> create
+
+        r = git_repo.run_gg("rbt-sync", "--progress")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        out = _plain(r.stdout)
+        assert "keep (unchanged): alpha" in out, out
+        assert re.search(r"posting.*beta", out), out
+        assert re.search(r"-> updated r/\d+", out), out
+        assert re.search(r"discard r/\d+: gamma", out), out
+        assert re.search(r"posting.*delta", out), out
+        assert re.search(r"-> created r/\d+", out), out
+
+    def test_no_progress_lines_without_flag(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """A plain real run stays quiet between the plan table and the summary."""
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("alpha")
+        git_repo.commit("beta")
+        _post_series(git_repo)
+
+        (git_repo.work_dir / "extra").write_text("changed\n")
+        git_repo.git("add", "extra")
+        git_repo.git("commit", "--amend", "--no-edit")      # amend beta -> update
+
+        r = git_repo.run_gg("rbt-sync")
+        assert r.returncode == 0
+        out = _plain(r.stdout)
+        # The plan table uses the words keep/update, but never these phrases:
+        assert "(unchanged)" not in out
+        assert "posting" not in out
+        assert "->" not in out
+
+    def test_verbose_implies_progress(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--verbose alone produces the progress one-liners (verbose => progress)."""
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("alpha")
+        git_repo.commit("beta")
+        _post_series(git_repo)
+
+        (git_repo.work_dir / "extra").write_text("changed\n")
+        git_repo.git("add", "extra")
+        git_repo.git("commit", "--amend", "--no-edit")      # amend beta -> update
+
+        r = git_repo.run_gg("rbt-sync", "-v")
+        assert r.returncode == 0
+        out = _plain(r.stdout)
+        assert re.search(r"posting.*beta", out), out
+        assert re.search(r"-> updated r/\d+", out), out
