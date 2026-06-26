@@ -145,12 +145,23 @@ def _execute(
             assert action.old_entry is not None
             entry_published = bool(action.old_entry.published)
             if publish and not entry_published:
+                if progress:
+                    print(
+                        f"{_BOLD}publish (unchanged): "
+                        f"{action.new_commit.subject}{_RESET}",
+                        flush=True,
+                    )
                 rc = publish_one(
                     action.old_entry.review_id,
                     dry_run=dry_run, verbose=verbose, cwd=cwd,
                 )
                 if rc == 0:
                     entry_published = True
+                    if progress:
+                        print(
+                            f"{_BOLD}  -> published "
+                            f"r/{action.old_entry.review_id}{_RESET}"
+                        )
             elif progress:
                 print(f"{_BOLD}keep (unchanged): {action.new_commit.subject}{_RESET}")
             entries.append(review_store.ReviewEntry(

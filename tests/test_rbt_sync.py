@@ -1241,3 +1241,20 @@ class TestProgress:
         out = _plain(r.stdout)
         assert re.search(r"posting.*beta", out), out
         assert re.search(r"-> updated r/\d+", out), out
+
+    def test_progress_publish_unchanged_line(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """--progress -p on an unpublished KEEP draft logs publish + result."""
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("alpha")
+        _post_series(git_repo)  # gg rbt without -p -> draft, review id r/1000
+
+        r = git_repo.run_gg("rbt-sync", "-p", "--progress")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        out = _plain(r.stdout)
+        assert "publish (unchanged): alpha" in out, out
+        assert "-> published r/1000" in out, out
+        # It is a publish, not a keep-noop or a re-post
+        assert "keep (unchanged): alpha" not in out
+        assert "posting" not in out
