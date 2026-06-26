@@ -145,3 +145,52 @@ class TestPositionTiebreak:
         non_discard = [a for a in actions if a.kind != ActionKind.DISCARD]
         assert non_discard[0].old_entry.review_id == "100"
         assert non_discard[1].old_entry.review_id == "101"
+
+
+class TestOrphanedReviewId:
+    def test_empty_review_id_forces_update(self) -> None:
+        """A matched entry with an empty review_id is re-posted (UPDATE),
+        and its successor is marked KEEP_DEP."""
+        old = [
+            _entry(0, "100", "alpha", "h1"),
+            _entry(1, "", "beta", "h2"),   # orphaned: post failed mid-flight
+            _entry(2, "102", "gamma", "h3"),
+        ]
+        new = [_commit("alpha", "h1"), _commit("beta", "h2"), _commit("gamma", "h3")]
+        actions = reconcile(old, new)
+        nd = [a for a in actions if a.kind != ActionKind.DISCARD]
+        assert len(nd) == 3
+        assert nd[0].kind == ActionKind.KEEP            # untouched
+        assert nd[1].kind == ActionKind.UPDATE          # orphan re-posted
+        assert nd[1].old_entry.review_id == ""
+        assert nd[2].kind == ActionKind.KEEP_DEP        # successor dep refreshed
+        assert nd[2].needs_dep_update is True
+
+    def test_consecutive_empty_ids(self) -> None:
+        """Two consecutive orphans: both UPDATE; the first real successor KEEP_DEP."""
+        old = [
+            _entry(0, "100", "alpha", "h1"),
+            _entry(1, "", "beta", "h2"),
+            _entry(2, "", "gamma", "h3"),
+            _entry(3, "103", "delta", "h4"),
+        ]
+        new = [
+            _commit("alpha", "h1"), _commit("beta", "h2"),
+            _commit("gamma", "h3"), _commit("delta", "h4"),
+        ]
+        actions = reconcile(old, new)
+        nd = [a for a in actions if a.kind != ActionKind.DISCARD]
+        assert nd[0].kind == ActionKind.KEEP
+        assert nd[1].kind == ActionKind.UPDATE
+        assert nd[2].kind == ActionKind.UPDATE
+        assert nd[3].kind == ActionKind.KEEP_DEP
+        assert nd[3].needs_dep_update is True
+
+    def test_unchanged_series_unaffected(self) -> None:
+        """No empty ids: classification is unchanged (regression guard)."""
+        old = [_entry(0, "100", "alpha", "h1"), _entry(1, "101", "beta", "h2")]
+        new = [_commit("alpha", "h1"), _commit("beta", "h2")]
+        actions = reconcile(old, new)
+        nd = [a for a in actions if a.kind != ActionKind.DISCARD]
+        assert all(a.kind == ActionKind.KEEP for a in nd)
+        assert all(not a.needs_dep_update for a in nd)

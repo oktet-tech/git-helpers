@@ -12,6 +12,13 @@ _FUZZY_THRESHOLD = 0.6
 _SUBJECT_WEIGHT = 0.7
 _POSITION_WEIGHT = 0.3
 
+# Sentinel predecessor for _mark_dep_updates. An orphaned entry (empty
+# review_id) is re-posted to a brand-new id, so its successor's predecessor
+# is guaranteed to differ from any stored value. Comparing this object to a
+# real review id (or None) is always unequal, which forces the successor's
+# dependency to be refreshed.
+_WILL_CHANGE = object()
+
 
 class ActionKind(Enum):
     KEEP = "keep"
@@ -121,7 +128,12 @@ def reconcile(
         commit = new[ni]
         if ni in matches:
             entry = old[matches[ni]]
-            if commit.diff_hash != entry.diff_hash:
+            if not entry.review_id:
+                # Orphaned entry: a previous post failed mid-flight, leaving an
+                # empty review id. Force a re-post so it gets a real id; the
+                # empty-id recovery path in _execute makes it a fresh post.
+                kind = ActionKind.UPDATE
+            elif commit.diff_hash != entry.diff_hash:
                 kind = ActionKind.UPDATE
             elif strip_prefix(commit.subject) != strip_prefix(entry.subject):
                 # Diff unchanged but commit subject edited -- push the new summary.
@@ -161,13 +173,18 @@ def _mark_dep_updates(actions: list[SyncAction], old: list[ReviewEntry]) -> None
     for i, entry in enumerate(old):
         old_pred[entry.review_id] = old[i - 1].review_id if i > 0 else None
 
-    prev_review_id: str | None = None
+    prev_review_id: object | None = None
     for action in non_discard:
         if action.old_entry and action.kind == ActionKind.KEEP:
             expected_pred = old_pred.get(action.old_entry.review_id)
             if prev_review_id != expected_pred:
                 action.kind = ActionKind.KEEP_DEP
                 action.needs_dep_update = True
-        prev_review_id = (
-            action.old_entry.review_id if action.old_entry else None
-        )
+        if action.old_entry is not None and not action.old_entry.review_id:
+            # Orphaned entry will be re-posted to a new id; force its
+            # successor to refresh its dependency.
+            prev_review_id = _WILL_CHANGE
+        elif action.old_entry is not None:
+            prev_review_id = action.old_entry.review_id
+        else:
+            prev_review_id = None
