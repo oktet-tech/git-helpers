@@ -6,6 +6,15 @@ import shutil
 
 from gg.matcher import ActionKind, SyncAction
 from gg.numbering import assign_numbers
+from gg.review_store import ReviewEntry
+
+
+def _review_cell(entry: ReviewEntry | None) -> str:
+    """Review-column text: r/<id>, r/(lost) for an orphaned (empty-id) entry,
+    or -- when there is no associated review."""
+    if entry is None:
+        return "--"
+    return f"r/{entry.review_id}" if entry.review_id else "r/(lost)"
 
 
 def _will_post(action: SyncAction) -> bool:
@@ -85,10 +94,10 @@ def format_plan(
                 subject = action.new_commit.subject
             else:
                 # Discard or skipped discard: show old entry
-                review = f"r/{action.old_entry.review_id}" if action.old_entry else "--"
+                review = _review_cell(action.old_entry)
                 subject = action.old_entry.subject if action.old_entry else ""
         else:
-            review = f"r/{action.old_entry.review_id}" if action.old_entry else "--"
+            review = _review_cell(action.old_entry)
             subject = action.new_commit.subject if action.new_commit else ""
 
         if show_pub:
