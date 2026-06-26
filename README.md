@@ -60,6 +60,7 @@ operations support `-d`/`--dry` for dry-run.
 | `git gg rbt-sync --no-numbers` | Suppress `[i/N]:` prefix on posted reviews |
 | `git gg rbt-sync --renumber` | Full `[1/N]..[N/N]` renumber instead of fractional |
 | `git gg rbt-sync -f` | Re-post every matched commit, ignoring the diff-hash cache |
+| `git gg rbt-sync --progress` | Print one line per action during a real run (implied by `-v`) |
 | `git gg rbt-sync --new` | Forget old reviews and post the current commits as a fresh series |
 | `git gg rbt-sync --close` | Close all reviews as submitted and clear the DB |
 | `git gg rbt-sync --upstream <ref>` | Override `@{u}` for the diff base and `--tracking-branch` (also on `gg rbt`) |
@@ -180,6 +181,10 @@ git gg rbt-sync --renumber
 # manual edits to a draft on the RB web UI, or to recover from a
 # cache that's gone stale.
 git gg rbt-sync -f
+
+# Watch a real run tick by -- one prose line per action
+# (posting/created/updated/keep/discard/publish). Implied by -v.
+git gg rbt-sync --progress
 
 # Or on the older command: bypass the diff-hash cache
 git gg rbt -u -f
