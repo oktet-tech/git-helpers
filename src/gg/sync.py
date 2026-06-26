@@ -126,7 +126,7 @@ def _execute(
                     else action.old_entry.subject if action.old_entry
                     else ""
                 )
-                print(f"{_BOLD}skip: {subj}{_RESET}")
+                print(f"{_BOLD}skip: {subj}{_RESET}", flush=True)
             continue
 
         assert action.new_commit is not None
@@ -160,10 +160,14 @@ def _execute(
                     if progress:
                         print(
                             f"{_BOLD}  -> published "
-                            f"r/{action.old_entry.review_id}{_RESET}"
+                            f"r/{action.old_entry.review_id}{_RESET}",
+                            flush=True,
                         )
             elif progress:
-                print(f"{_BOLD}keep (unchanged): {action.new_commit.subject}{_RESET}")
+                print(
+                    f"{_BOLD}keep (unchanged): {action.new_commit.subject}{_RESET}",
+                    flush=True,
+                )
             entries.append(review_store.ReviewEntry(
                 branch=branch_name,
                 position=len(entries) + 1,
@@ -233,7 +237,7 @@ def _execute(
 
         if progress and rid:
             verb = "created" if needs_fresh_post else "updated"
-            print(f"{_BOLD}  -> {verb} r/{rid}{_RESET}")
+            print(f"{_BOLD}  -> {verb} r/{rid}{_RESET}", flush=True)
 
         entries.append(review_store.ReviewEntry(
             branch=branch_name,
