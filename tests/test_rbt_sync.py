@@ -1317,6 +1317,11 @@ class TestOrphanedReviewIdRepair:
         assert dep_args, gc
         assert dep_args[0].split("=", 1)[1] == beta_new_id
 
+        # Under -p, publishing happens inline via `rbt post -p` (not a separate
+        # `rbt publish` call), so assert the publish flag is present on both posts.
+        assert "-p" in fresh_posts[0], fresh_posts[0]
+        assert "-p" in repost_calls[0], repost_calls[0]
+
         # No post used an empty -r id, and no publish used an empty id
         for c in post_calls:
             if "-r" in c:
@@ -1349,7 +1354,7 @@ class TestOrphanedReviewIdRepair:
         assert r.returncode == 0
         out = _plain(r.stdout)
         assert "r/(lost)" in out
-        beta_line = next(l for l in out.splitlines() if "beta" in l)
+        beta_line = next(l for l in out.splitlines() if "beta" in l and "r/" in l)
         assert "update" in beta_line
-        gamma_line = next(l for l in out.splitlines() if "gamma" in l)
+        gamma_line = next(l for l in out.splitlines() if "gamma" in l and "r/" in l)
         assert "keep+dep" in gamma_line

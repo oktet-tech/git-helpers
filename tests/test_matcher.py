@@ -186,6 +186,16 @@ class TestOrphanedReviewId:
         assert nd[3].kind == ActionKind.KEEP_DEP
         assert nd[3].needs_dep_update is True
 
+    def test_empty_review_id_with_changed_diff_is_update(self) -> None:
+        """An entry with empty review_id AND a changed diff_hash is still UPDATE.
+        The empty-id check takes precedence over diff comparison."""
+        old = [_entry(0, "100", "alpha", "h1"), _entry(1, "", "beta", "h2")]
+        new = [_commit("alpha", "h1"), _commit("beta", "h2_changed")]
+        actions = reconcile(old, new)
+        nd = [a for a in actions if a.kind != ActionKind.DISCARD]
+        assert nd[1].kind == ActionKind.UPDATE
+        assert nd[1].old_entry.review_id == ""
+
     def test_unchanged_series_unaffected(self) -> None:
         """No empty ids: classification is unchanged (regression guard)."""
         old = [_entry(0, "100", "alpha", "h1"), _entry(1, "101", "beta", "h2")]
