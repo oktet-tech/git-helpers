@@ -1258,3 +1258,98 @@ class TestProgress:
         # It is a publish, not a keep-noop or a re-post
         assert "keep (unchanged): alpha" not in out
         assert "posting" not in out
+
+
+class TestOrphanedReviewIdRepair:
+    """A mid-series entry whose stored review_id is empty (its original post
+    failed) is auto-re-posted as a fresh review, its successor's dependency is
+    refreshed to the new id, and both are published under -p."""
+
+    def test_orphan_repost_fixes_dep_and_publishes(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        from gg import review_store
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("alpha")
+        git_repo.commit("beta")    # will be orphaned
+        git_repo.commit("gamma")   # successor, keeps its id
+        _post_series(git_repo)     # post 3 drafts
+
+        entries = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        assert len(entries) == 3
+        beta_old_id = entries[1].review_id
+        gamma_id = entries[2].review_id
+        assert beta_old_id and gamma_id
+
+        # Corrupt beta: simulate its post having failed (empty review_id),
+        # preserving subject + diff_hash so reconcile still matches it as KEEP.
+        entries[1] = review_store.ReviewEntry(
+            branch="feature", position=2, review_id="",
+            subject=entries[1].subject, diff_hash=entries[1].diff_hash,
+            published=entries[1].published,
+        )
+        review_store.save_reviews(entries, cwd=git_repo.work_dir)
+
+        initial = rbt_mock.call_count()
+        r = git_repo.run_gg("rbt-sync", "-p", "-U", "reviewer")
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+
+        new_calls = rbt_mock.calls()[initial:]
+        post_calls = [c for c in new_calls if c and c[0] == "post"]
+
+        # beta is re-created (fresh post, no -r); gamma is dep-updated (re-post -r)
+        fresh_posts = [c for c in post_calls if "-r" not in c]
+        repost_calls = [c for c in post_calls if "-r" in c]
+        assert len(fresh_posts) == 1, post_calls
+        assert len(repost_calls) == 1, post_calls
+
+        # gamma re-posted against its own id
+        gc = repost_calls[0]
+        assert gc[gc.index("-r") + 1] == gamma_id
+
+        # beta now has a new, non-empty id in the DB
+        after = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        beta_new_id = after[1].review_id
+        assert beta_new_id and beta_new_id != beta_old_id
+
+        # gamma depends on beta's NEW id
+        dep_args = [a for a in gc if a.startswith("--depends-on=")]
+        assert dep_args, gc
+        assert dep_args[0].split("=", 1)[1] == beta_new_id
+
+        # No post used an empty -r id, and no publish used an empty id
+        for c in post_calls:
+            if "-r" in c:
+                assert c[c.index("-r") + 1] != ""
+        for c in new_calls:
+            if c and c[0] == "publish":
+                assert len(c) >= 2 and c[1] != "", c
+
+    def test_orphan_dry_run_plan_shows_repair(
+        self, git_repo: GitRepo, rbt_mock: RbtMock,
+    ) -> None:
+        """-d plan classifies the orphan as update, its successor keep+dep,
+        and renders the lost id as r/(lost)."""
+        from gg import review_store
+        git_repo.create_branch("feature", "master")
+        git_repo.commit("alpha")
+        git_repo.commit("beta")
+        git_repo.commit("gamma")
+        _post_series(git_repo)
+
+        entries = review_store.load_reviews("feature", cwd=git_repo.work_dir)
+        entries[1] = review_store.ReviewEntry(
+            branch="feature", position=2, review_id="",
+            subject=entries[1].subject, diff_hash=entries[1].diff_hash,
+            published=entries[1].published,
+        )
+        review_store.save_reviews(entries, cwd=git_repo.work_dir)
+
+        r = git_repo.run_gg("rbt-sync", "-d")
+        assert r.returncode == 0
+        out = _plain(r.stdout)
+        assert "r/(lost)" in out
+        beta_line = next(l for l in out.splitlines() if "beta" in l)
+        assert "update" in beta_line
+        gamma_line = next(l for l in out.splitlines() if "gamma" in l)
+        assert "keep+dep" in gamma_line
