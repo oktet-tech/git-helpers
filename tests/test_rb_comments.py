@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+import gg.rb_comments as rbc
 from gg.rb_comments import Issue, fetch_open_issues
 from tests.conftest import GitRepo, RbtMock
 
@@ -82,6 +83,17 @@ def test_general_open_issue_collected(
     assert issues[0].file is None
     assert issues[0].first_line is None
     assert issues[0].text == "add docstring"
+
+
+def test_api_get_list_follows_next(monkeypatch) -> None:
+    """Fix 2: _api_get_list follows links.next to collect all pages."""
+    pages = {
+        "/p1": {"diff_comments": [{"id": 1}], "links": {"next": {"href": "/p2"}}},
+        "/p2": {"diff_comments": [{"id": 2}]},
+    }
+    monkeypatch.setattr(rbc, "_api_get", lambda path, *, cwd=None: pages[path])
+    items = rbc._api_get_list("/p1", "diff_comments")
+    assert [i["id"] for i in items] == [1, 2]
 
 
 def test_multiple_reviews_aggregated(

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from gg import review_store
 from tests.conftest import GitRepo, RbtMock
 
@@ -123,6 +126,60 @@ def test_empty_review_id_skipped(git_repo: GitRepo, rbt_mock: RbtMock) -> None:
     assert r.returncode == 0
     assert "ok" in r.stdout
     assert "no review id" in r.stderr
+
+
+def test_all_reviews_failed_returns_error(
+    git_repo: GitRepo, rbt_mock: RbtMock,
+) -> None:
+    """Fix 1: when every review fetch fails, return 1 and don't say 'No open issues'."""
+    _seed_branch(git_repo, [_entry(1, "1000", "alpha")])
+    # No seeded comments; fail the very first api-get (the fetch_review call)
+    rbt_mock.queue_failure(output="boom", returncode=1, count=1)
+    r = git_repo.run_gg("comments", "-o", "-")
+    assert r.returncode == 1
+    assert "could not read" in r.stderr
+    assert "No open issues" not in r.stdout
+
+
+def test_default_output_resolves_to_repo_root(
+    git_repo: GitRepo, rbt_mock: RbtMock,
+) -> None:
+    """Fix 3: relative output path is resolved from repo root, not subprocess cwd."""
+    _seed_branch(git_repo, [_entry(1, "1000", "alpha")])
+    rbt_mock.seed_review_comments("1000", reviews=[
+        {"id": 5, "user": "u", "general_comments": [], "diff_comments": [
+            {"id": 1, "text": "x", "issue_opened": True, "issue_status": "open",
+             "first_line": 1, "num_lines": 1, "filediff": {"dest_file": "a.py"}}]}])
+    subdir = git_repo.work_dir / "src"
+    subdir.mkdir()
+    r = subprocess.run(
+        [sys.executable, "-m", "gg", "comments"],
+        cwd=subdir,
+        env=git_repo._env,
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr
+    assert (git_repo.work_dir / ".gg" / "review-comments.md").exists()
+    assert not (subdir / ".gg" / "review-comments.md").exists()
+
+
+def test_empty_text_diff_bullet_no_trailing_space(
+    git_repo: GitRepo, rbt_mock: RbtMock,
+) -> None:
+    """Fix 4: diff comment with empty text produces no trailing space on bullet."""
+    _seed_branch(git_repo, [_entry(1, "1000", "alpha")])
+    rbt_mock.seed_review_comments("1000", reviews=[
+        {"id": 5, "user": "u", "general_comments": [], "diff_comments": [
+            {"id": 1, "text": "", "issue_opened": True, "issue_status": "open",
+             "first_line": 10, "num_lines": 1, "filediff": {"dest_file": "a.py"}}]}])
+    r = git_repo.run_gg("comments", "-o", "-")
+    assert r.returncode == 0, r.stderr
+    bullet = next(
+        line for line in r.stdout.splitlines() if line.startswith("- L10")
+    )
+    assert not bullet.endswith(" "), repr(bullet)
+    assert bullet.endswith(":")
 
 
 def test_branch_flag(git_repo: GitRepo, rbt_mock: RbtMock) -> None:

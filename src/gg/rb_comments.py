@@ -38,6 +38,18 @@ def _api_get(path: str, *, cwd: Path | None = None) -> dict:
     return json.loads(r.stdout)
 
 
+def _api_get_list(path: str, key: str, *, cwd: Path | None = None) -> list[dict]:
+    """Fetch a paginated list resource, following links.next; concatenate `key`."""
+    items: list[dict] = []
+    next_path: str | None = path
+    while next_path:
+        data = _api_get(next_path, cwd=cwd)
+        items.extend(data.get(key, []))
+        nxt = (data.get("links") or {}).get("next") or {}
+        next_path = nxt.get("href")
+    return items
+
+
 def _is_open_issue(comment: dict) -> bool:
     return bool(comment.get("issue_opened")) and comment.get("issue_status") == "open"
 
@@ -45,20 +57,21 @@ def _is_open_issue(comment: dict) -> bool:
 def fetch_open_issues(review_id: str, *, cwd: Path | None = None) -> list[Issue]:
     """Return all open-issue comments (diff + general) for one review request."""
     review_url = rb_api.fetch_review(review_id, cwd=cwd).get("absolute_url", "")
-    reviews = _api_get(
-        f"/review-requests/{review_id}/reviews/", cwd=cwd,
-    ).get("reviews", [])
+    reviews = _api_get_list(
+        f"/review-requests/{review_id}/reviews/", "reviews", cwd=cwd,
+    )
 
     issues: list[Issue] = []
     for review in reviews:
         oid = review["id"]
         author = review.get("links", {}).get("user", {}).get("title", "")
 
-        diff = _api_get(
+        diff = _api_get_list(
             f"/review-requests/{review_id}/reviews/{oid}/diff-comments/"
             f"?expand=filediff",
+            "diff_comments",
             cwd=cwd,
-        ).get("diff_comments", [])
+        )
         for c in diff:
             if not _is_open_issue(c):
                 continue
@@ -74,10 +87,11 @@ def fetch_open_issues(review_id: str, *, cwd: Path | None = None) -> list[Issue]
                 kind="diff",
             ))
 
-        general = _api_get(
+        general = _api_get_list(
             f"/review-requests/{review_id}/reviews/{oid}/general-comments/",
+            "general_comments",
             cwd=cwd,
-        ).get("general_comments", [])
+        )
         for c in general:
             if not _is_open_issue(c):
                 continue

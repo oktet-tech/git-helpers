@@ -63,7 +63,7 @@ def format_markdown(
         out.append(f"## {fname}")
         for i in sorted(by_file[fname], key=lambda i: (i.first_line or 0)):
             first = i.text.splitlines()[0] if i.text else ""
-            out.append(f"- {_line_label(i)} (r/{i.review_id}, by {i.author}): {first}")
+            out.append(f"- {_line_label(i)} (r/{i.review_id}, by {i.author}): {first}".rstrip())
             _emit_body(out, i)
         out.append("")
 
@@ -71,7 +71,7 @@ def format_markdown(
         out.append("## General")
         for i in general_issues:
             first = i.text.splitlines()[0] if i.text else ""
-            out.append(f"- (r/{i.review_id}, by {i.author}): {first}")
+            out.append(f"- (r/{i.review_id}, by {i.author}): {first}".rstrip())
             _emit_body(out, i)
         out.append("")
 
@@ -104,6 +104,10 @@ def run(args: argparse.Namespace) -> int:
             print(f"[gg] skipping r/{e.review_id}: {exc}", file=sys.stderr)
             skipped += 1
 
+    if read == 0 and skipped:
+        print(f"[gg] could not read any of {skipped} review(s).", file=sys.stderr)
+        return 1
+
     if not all_issues:
         print("No open issues 🎉")
         return 0
@@ -115,7 +119,7 @@ def run(args: argparse.Namespace) -> int:
     else:
         out_path = Path(args.output)
         if not out_path.is_absolute():
-            out_path = cwd / out_path
+            out_path = git.repo_root(cwd=cwd) / out_path
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(text)
         print(f"Wrote {len(all_issues)} open issue(s) to {out_path}")
