@@ -63,6 +63,7 @@ operations support `-d`/`--dry` for dry-run.
 | `git gg rbt-sync --progress` | Print one line per action during a real run (implied by `-v`) |
 | `git gg rbt-sync --new` | Forget old reviews and post the current commits as a fresh series |
 | `git gg rbt-sync --close` | Close all reviews as submitted and clear the DB |
+| `git rbt-comments` | Export the branch's open ReviewBoard issues to `.gg/review-comments.md` (`-o -` for stdout) |
 | `git gg rbt-sync --upstream <ref>` | Override `@{u}` for the diff base and `--tracking-branch` (also on `gg rbt`) |
 | `git gg rbt-sync --adopt branchA` | Reconcile against `branchA`'s reviews and save under the current branch |
 | `git gg rbt-sync --adopt branchA --adopt-overwrite` | Same, but overwrite the current branch's existing DB rows |
@@ -223,6 +224,24 @@ Reviews that are already published are left untouched -- a repeat
 `gg rbt-sync -p` over a published branch makes no publish calls. gg
 tracks per-review publish state in `reviews.db`; `gg publish` remains
 the way to (re)publish every recorded draft on a branch.
+
+### Collecting open review comments
+
+After reviewers file issues across the series, gather every open issue into a
+single file to hand to an LLM (or to read through):
+
+```shell
+# Write .gg/review-comments.md (grouped by source file) and print its path
+git rbt-comments
+
+# Or stream to stdout / a pipe
+git rbt-comments -o -
+```
+
+Only open issues are included — resolved/dropped issues and non-issue
+comments are skipped. The file lists each issue with its `file:line`, the
+reviewer, the review id, and a link, so an agent with the repo checked out
+can open each location and address it.
 
 ### Importing an existing ReviewBoard chain
 
