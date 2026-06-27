@@ -5,13 +5,14 @@ from __future__ import annotations
 import argparse
 import sys
 
-from gg import db, publish, rbt, rbt_import, sync
+from gg import comments, db, publish, rbt, rbt_import, sync
 
 
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch to the appropriate subcommand."""
     parser = argparse.ArgumentParser(prog="gg", description="git-helpers CLI")
     sub = parser.add_subparsers(dest="command")
+    comments.add_parser(sub)
     db.add_parser(sub)
     publish.add_parser(sub)
     rbt.add_parser(sub)
