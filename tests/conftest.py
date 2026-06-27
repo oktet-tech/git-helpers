@@ -39,6 +39,7 @@ class RbtMock:
 
     script_dir: Path
     log_file: Path
+    state_dir: Path
 
     def calls(self) -> list[list[str]]:
         if not self.log_file.exists():
@@ -51,6 +52,22 @@ class RbtMock:
 
     def call_count(self) -> int:
         return len(self.calls())
+
+    def seed_review_comments(self, review_id: str, *, reviews: list[dict]) -> None:
+        """Seed comment fixtures for a review request.
+
+        reviews: list of {id, user, diff_comments, general_comments}. Each
+        diff_comment: {id, text, issue_opened, issue_status, first_line,
+        num_lines, filediff: {dest_file}}. Each general_comment: {id, text,
+        issue_opened, issue_status}.
+        """
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        state_file = self.state_dir / f"{review_id}.json"
+        state: dict[str, Any] = {}
+        if state_file.exists():
+            state = json.loads(state_file.read_text())
+        state["reviews"] = reviews
+        state_file.write_text(json.dumps(state))
 
     def queue_failure(self, output: str, returncode: int = 1, count: int = 1) -> None:
         """Pre-program the next ``count`` rbt invocations to fail.
@@ -174,21 +191,44 @@ if os.path.exists(_QFILE):
 cmd = sys.argv[1] if len(sys.argv) > 1 else ""
 
 if cmd == "api-get":
-    m = re.search(r"(\\d+)", sys.argv[2] if len(sys.argv) > 2 else "")
-    review_id = m.group(1) if m else "0"
-    state_file = os.path.join(STATE_DIR, review_id + ".json")
+    path = sys.argv[2] if len(sys.argv) > 2 else ""
+    path_only = path.split("?")[0].rstrip("/")
+    nums = re.findall(r"/(\\d+)", path_only)
+    rr_id = nums[0] if nums else "0"
+    state_file = os.path.join(STATE_DIR, rr_id + ".json")
     state = {}
     if os.path.exists(state_file):
         with open(state_file) as f:
             state = json.load(f)
-    rr = {
-        "id": int(review_id),
-        "summary": state.get("summary", ""),
-        "blocks": [],
-        "target_people": [{"title": p} for p in state.get("people", [])],
-        "target_groups": [{"title": g} for g in state.get("groups", [])],
-    }
-    print(json.dumps({"review_request": rr}))
+    reviews = state.get("reviews", [])
+
+    def _find(oid):
+        return next((r for r in reviews if str(r["id"]) == str(oid)), {})
+
+    if path_only.endswith("diff-comments"):
+        rv = _find(nums[1]) if len(nums) > 1 else {}
+        print(json.dumps({"diff_comments": rv.get("diff_comments", [])}))
+    elif path_only.endswith("general-comments"):
+        rv = _find(nums[1]) if len(nums) > 1 else {}
+        print(json.dumps({"general_comments": rv.get("general_comments", [])}))
+    elif path_only.endswith("reviews"):
+        out = [
+            {"id": r["id"], "links": {"user": {"title": r.get("user", "")}}}
+            for r in reviews
+        ]
+        print(json.dumps({"reviews": out}))
+    else:
+        rr = {
+            "id": int(rr_id),
+            "summary": state.get("summary", ""),
+            "blocks": [],
+            "target_people": [{"title": p} for p in state.get("people", [])],
+            "target_groups": [{"title": g} for g in state.get("groups", [])],
+            "absolute_url": state.get(
+                "absolute_url", f"https://reviews.example.com/r/{rr_id}/"
+            ),
+        }
+        print(json.dumps({"review_request": rr}))
 
 elif cmd == "close":
     print("Discarded review request.")
@@ -247,7 +287,7 @@ def rbt_mock(tmp_path: Path) -> RbtMock:
     script.write_text(_MOCK_RBT_SCRIPT)
     script.chmod(0o755)
 
-    return RbtMock(script_dir=mock_dir, log_file=log_file)
+    return RbtMock(script_dir=mock_dir, log_file=log_file, state_dir=state_dir)
 
 
 @pytest.fixture

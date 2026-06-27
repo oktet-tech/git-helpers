@@ -47,6 +47,7 @@ def fetch_review(review_id: str, *, cwd: Path | None = None) -> dict:
         "blocks": [_parse_block_id(b) for b in rr.get("blocks", [])],
         "target_people": [p["title"] for p in rr.get("target_people", [])],
         "target_groups": [g["title"] for g in rr.get("target_groups", [])],
+        "absolute_url": rr.get("absolute_url", ""),
     }
 
 
