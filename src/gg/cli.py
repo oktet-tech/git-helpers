@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from gg import comments, db, publish, rbt, rbt_import, sync
+from gg import comments, db, publish, rbt, rbt_import, reply, sync
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,6 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     publish.add_parser(sub)
     rbt.add_parser(sub)
     rbt_import.add_parser(sub)
+    reply.add_parser(sub)
     sync.add_parser(sub)
 
     args = parser.parse_args(argv)
