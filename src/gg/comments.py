@@ -80,7 +80,8 @@ def format_markdown(
             out.append(f"  {review_url}")
         for i in sorted(review_issues, key=lambda i: (i.file or "", i.first_line or 0)):
             first = i.text.splitlines()[0] if i.text else ""
-            out.append(f"- {_location(i)} (by {i.author}): {first}".rstrip())
+            tag = f" <!-- gg {i.kind} {i.review_oid} {i.comment_id} -->"
+            out.append(f"- {_location(i)} (by {i.author}): {first}".rstrip() + tag)
             _emit_continuation(out, i)
         out.append("")
 

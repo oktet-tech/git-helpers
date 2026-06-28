@@ -178,8 +178,21 @@ def test_empty_text_diff_bullet_no_trailing_space(
     bullet = next(
         line for line in r.stdout.splitlines() if line.startswith("- a.py:10")
     )
-    assert not bullet.endswith(" "), repr(bullet)
-    assert bullet.endswith(":")
+    assert bullet.endswith("<!-- gg diff 5 1 -->")
+    assert ":  <!-- gg" not in bullet  # exactly one space between ':' and the tag
+
+
+def test_bullet_has_hidden_id_tag(git_repo: GitRepo, rbt_mock: RbtMock) -> None:
+    _seed_branch(git_repo, [_entry(1, "1000", "alpha")])
+    rbt_mock.seed_review_comments("1000", reviews=[
+        {"id": 5, "user": "u", "general_comments": [], "diff_comments": [
+            {"id": 42, "text": "x", "issue_opened": True, "issue_status": "open",
+             "first_line": 7, "num_lines": 1, "filediff": {"dest_file": "a.py"}}]}])
+    r = git_repo.run_gg("comments", "-o", "-")
+    assert r.returncode == 0, r.stderr
+    assert "<!-- gg diff 5 42 -->" in r.stdout
+    line = next(ln for ln in r.stdout.splitlines() if ln.startswith("- a.py:7"))
+    assert line.endswith("<!-- gg diff 5 42 -->")
 
 
 def test_branch_flag(git_repo: GitRepo, rbt_mock: RbtMock) -> None:
