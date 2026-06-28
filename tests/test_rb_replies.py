@@ -1,3 +1,7 @@
+import pytest
+
+from rbtools.api.errors import ServerInterfaceError
+
 from gg import rb_replies
 
 
@@ -34,3 +38,13 @@ def test_post_replies_for_review_shapes_calls(monkeypatch):
     assert reply.diff == [{"reply_to_id": 1, "text": "fixed it"}]
     assert reply.general == [{"reply_to_id": 2, "text": "answered"}]
     assert reply.published is True
+
+
+def test_post_replies_wraps_transport_error_as_systemexit(monkeypatch):
+    class _BoomReview:
+        def get_replies(self):
+            raise ServerInterfaceError("connection reset")
+    monkeypatch.setattr(rb_replies, "_get_review", lambda rr, oid, cwd: _BoomReview())
+    with pytest.raises(SystemExit):
+        rb_replies.post_replies_for_review(
+            "1000", 55, [{"kind": "diff", "comment_id": 1, "text": "x"}], cwd=None)
