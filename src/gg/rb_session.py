@@ -17,6 +17,7 @@ import os
 import runpy
 import socket
 import subprocess
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -109,9 +110,16 @@ def api_get(path: str, *, cwd: Path | None = None) -> dict[str, Any]:
         client = get_client(cwd, force_new=attempt > 0)
         try:
             if path.startswith(("http://", "https://")):
+                # A pagination 'next' href is an absolute URL with its query
+                # already baked in; fetch it as-is.
                 resource = client.get_url(path)
             else:
-                resource = client.get_path(path)
+                # get_path does NOT honour a query string embedded in the path
+                # (unlike `rbt api-get`); pass query args as kwargs so e.g.
+                # ?expand=filediff actually expands (else dest_file is missing).
+                base, _, query = path.partition("?")
+                params = dict(urllib.parse.parse_qsl(query)) if query else {}
+                resource = client.get_path(base, **params)
         except APIError as exc:
             raise SystemExit(f"rbt api-get failed for {path}: {exc}") from exc
         except (ServerInterfaceError, OSError) as exc:
