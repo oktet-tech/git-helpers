@@ -116,3 +116,17 @@ def test_multiple_reviews_aggregated(
     issues = fetch_open_issues("100", cwd=git_repo.work_dir)
     assert {i.file for i in issues} == {"a.py", "b.py"}
     assert {i.author for i in issues} == {"a", "b"}
+
+
+def test_issue_carries_comment_id_and_review_oid(
+    git_repo: GitRepo, rbt_mock: RbtMock, monkeypatch,
+) -> None:
+    rbt_mock.seed_review_comments("100", reviews=[
+        {"id": 55, "user": "u", "general_comments": [], "diff_comments": [
+            {"id": 777, "text": "x", "issue_opened": True, "issue_status": "open",
+             "first_line": 5, "num_lines": 1, "filediff": {"dest_file": "a.py"}}]}])
+    _on_path(rbt_mock, monkeypatch)
+    [issue] = fetch_open_issues("100", cwd=git_repo.work_dir)
+    assert issue.comment_id == 777
+    assert issue.review_oid == 55
+    assert issue.kind == "diff"

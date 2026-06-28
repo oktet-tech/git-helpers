@@ -14,6 +14,8 @@ class Issue:
 
     review_id: str
     review_url: str
+    review_oid: int        # id of the review that owns this comment
+    comment_id: int        # id of the comment itself (reply_to / issue target)
     file: str | None       # dest_file for diff comments; None for general
     first_line: int | None
     num_lines: int | None
@@ -68,6 +70,8 @@ def fetch_open_issues(review_id: str, *, cwd: Path | None = None) -> list[Issue]
             issues.append(Issue(
                 review_id=str(review_id),
                 review_url=review_url,
+                review_oid=oid,
+                comment_id=c["id"],
                 file=filediff.get("dest_file"),
                 first_line=c.get("first_line"),
                 num_lines=c.get("num_lines"),
@@ -87,6 +91,8 @@ def fetch_open_issues(review_id: str, *, cwd: Path | None = None) -> list[Issue]
             issues.append(Issue(
                 review_id=str(review_id),
                 review_url=review_url,
+                review_oid=oid,
+                comment_id=c["id"],
                 file=None,
                 first_line=None,
                 num_lines=None,
