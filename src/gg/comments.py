@@ -29,30 +29,38 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[
     p.set_defaults(func=run)
 
 
-def _line_label(issue: Issue) -> str:
-    """L<first_line> or L<first>-<last> for a diff comment; '' for general."""
-    if issue.first_line is None:
-        return ""
+def _location(issue: Issue) -> str:
+    """`path:line` (or `path:first-last`) for a diff comment; '(general)' else."""
+    if not issue.file or issue.first_line is None:
+        return "(general)"
     if issue.num_lines and issue.num_lines > 1:
-        return f"L{issue.first_line}-{issue.first_line + issue.num_lines - 1}"
-    return f"L{issue.first_line}"
+        return f"{issue.file}:{issue.first_line}-{issue.first_line + issue.num_lines - 1}"
+    return f"{issue.file}:{issue.first_line}"
 
 
-def _emit_body(out: list[str], issue: Issue) -> None:
-    """Append continuation text lines and the review URL for one issue."""
-    cont = issue.text.splitlines()[1:]
-    for line in cont:
+def _emit_continuation(out: list[str], issue: Issue) -> None:
+    """Append the comment's continuation lines (the first is on the bullet)."""
+    for line in issue.text.splitlines()[1:]:
         out.append(f"  {line}")
-    if issue.review_url:
-        out.append(f"  {issue.review_url}")
 
 
 def format_markdown(
-    issues: list[Issue], *, branch: str, review_count: int,
+    issues: list[Issue],
+    *,
+    branch: str,
+    review_count: int,
+    order: list[str],
+    meta: dict[str, tuple[str | None, str]],
 ) -> str:
-    """Render open issues as markdown grouped by source file."""
-    diff_issues = [i for i in issues if i.kind == "diff"]
-    general_issues = [i for i in issues if i.kind == "general"]
+    """Render open issues grouped by commit/review, in series order.
+
+    Each group header carries the commit hash + summary (and the review link);
+    each comment points at a clickable `path:line`. `order` lists review ids in
+    series order; `meta` maps review id -> (commit_hash | None, summary).
+    """
+    by_review: dict[str, list[Issue]] = {}
+    for i in issues:
+        by_review.setdefault(str(i.review_id), []).append(i)
 
     out: list[str] = [
         f"# Open review issues — branch {branch} "
@@ -60,26 +68,51 @@ def format_markdown(
         "",
     ]
 
-    by_file: dict[str, list[Issue]] = {}
-    for i in diff_issues:
-        by_file.setdefault(i.file or "(unknown file)", []).append(i)
-    for fname in sorted(by_file):
-        out.append(f"## {fname}")
-        for i in sorted(by_file[fname], key=lambda i: (i.first_line or 0)):
+    for rid in order:
+        review_issues = by_review.get(rid)
+        if not review_issues:
+            continue
+        commit_hash, summary = meta.get(rid, (None, ""))
+        label = f"{commit_hash} {summary}".strip() if commit_hash else summary
+        out.append(f"## {label}  —  r/{rid}".rstrip())
+        review_url = next((i.review_url for i in review_issues if i.review_url), "")
+        if review_url:
+            out.append(f"  {review_url}")
+        for i in sorted(review_issues, key=lambda i: (i.file or "", i.first_line or 0)):
             first = i.text.splitlines()[0] if i.text else ""
-            out.append(f"- {_line_label(i)} (r/{i.review_id}, by {i.author}): {first}".rstrip())
-            _emit_body(out, i)
-        out.append("")
-
-    if general_issues:
-        out.append("## General")
-        for i in general_issues:
-            first = i.text.splitlines()[0] if i.text else ""
-            out.append(f"- (r/{i.review_id}, by {i.author}): {first}".rstrip())
-            _emit_body(out, i)
+            out.append(f"- {_location(i)} (by {i.author}): {first}".rstrip())
+            _emit_continuation(out, i)
         out.append("")
 
     return "\n".join(out).rstrip() + "\n"
+
+
+def _commit_meta(
+    entries: list, branch: str, cwd: Path,
+) -> tuple[list[str], dict[str, tuple[str | None, str]]]:
+    """Build (series-ordered review ids, review_id -> (commit_hash, summary)).
+
+    The commit hash is matched by subject and only attempted for the checked-out
+    branch; it degrades to None (summary only) when it cannot be determined.
+    """
+    hash_by_subject: dict[str, str] = {}
+    try:
+        if branch == git.branchname(cwd=cwd):
+            rng = git.rev_range(cwd=cwd)
+            for h, subject in git.revs_with_subjects(rng, cwd=cwd):
+                hash_by_subject[review_store.strip_prefix(subject)] = h
+    except (OSError, ValueError, RuntimeError):
+        hash_by_subject = {}
+
+    ordered = sorted(entries, key=lambda e: e.position)
+    order = [e.review_id for e in ordered if e.review_id]
+    meta: dict[str, tuple[str | None, str]] = {}
+    for e in ordered:
+        if not e.review_id:
+            continue
+        summary = review_store.strip_prefix(e.subject)
+        meta[e.review_id] = (hash_by_subject.get(summary), summary)
+    return order, meta
 
 
 def run(args: argparse.Namespace) -> int:
@@ -124,7 +157,10 @@ def run(args: argparse.Namespace) -> int:
         print("No open issues 🎉")
         return 0
 
-    text = format_markdown(all_issues, branch=branch, review_count=read)
+    order, meta = _commit_meta(entries, branch, cwd)
+    text = format_markdown(
+        all_issues, branch=branch, review_count=read, order=order, meta=meta,
+    )
 
     if args.output == "-":
         sys.stdout.write(text)

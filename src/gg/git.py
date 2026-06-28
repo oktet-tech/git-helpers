@@ -104,3 +104,17 @@ def list_revs(range_spec: str, *, cwd: Path | None = None) -> list[str]:
     if not output:
         return []
     return output.splitlines()
+
+
+def revs_with_subjects(
+    range_spec: str, *, cwd: Path | None = None,
+) -> list[tuple[str, str]]:
+    """Return (short_hash, subject) pairs for a range, chronological order."""
+    # \x1f (unit separator) cannot appear in a subject line.
+    output = _run("log", "--reverse", "--format=%h%x1f%s", range_spec, cwd=cwd)
+    pairs: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        h, _, subject = line.partition("\x1f")
+        if h:
+            pairs.append((h, subject))
+    return pairs

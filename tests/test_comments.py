@@ -38,10 +38,10 @@ def test_groups_by_file_and_general_to_stdout(
     r = git_repo.run_gg("comments", "-o", "-")
     assert r.returncode == 0, r.stderr
     out = r.stdout
-    assert "## src/gg/sync.py" in out
-    assert "L142 (r/1000, by ark-oleg): prefer raising here" in out
-    assert "## General" in out
-    assert "(r/1001, by ark-alxk): add a module docstring" in out
+    assert "## alpha  —  r/1000" in out
+    assert "src/gg/sync.py:142 (by ark-oleg): prefer raising here" in out
+    assert "## beta  —  r/1001" in out
+    assert "(general) (by ark-alxk): add a module docstring" in out
     assert "/r/1000/" in out
     assert "2 open across 2 reviews" in out
 
@@ -56,7 +56,7 @@ def test_line_span_rendered(git_repo: GitRepo, rbt_mock: RbtMock) -> None:
     ])
     r = git_repo.run_gg("comments", "-o", "-")
     assert r.returncode == 0, r.stderr
-    assert "L160-163 (r/1000, by u): dedupe" in r.stdout
+    assert "a.py:160-163 (by u): dedupe" in r.stdout
 
 
 def test_default_output_file_written(git_repo: GitRepo, rbt_mock: RbtMock) -> None:
@@ -71,7 +71,7 @@ def test_default_output_file_written(git_repo: GitRepo, rbt_mock: RbtMock) -> No
     assert r.returncode == 0, r.stderr
     out_file = git_repo.work_dir / ".gg" / "review-comments.md"
     assert out_file.exists()
-    assert "## a.py" in out_file.read_text()
+    assert "a.py:1 (by u): x" in out_file.read_text()
     assert str(out_file) in r.stdout  # path is printed
 
 
@@ -176,7 +176,7 @@ def test_empty_text_diff_bullet_no_trailing_space(
     r = git_repo.run_gg("comments", "-o", "-")
     assert r.returncode == 0, r.stderr
     bullet = next(
-        line for line in r.stdout.splitlines() if line.startswith("- L10")
+        line for line in r.stdout.splitlines() if line.startswith("- a.py:10")
     )
     assert not bullet.endswith(" "), repr(bullet)
     assert bullet.endswith(":")
