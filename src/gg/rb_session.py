@@ -15,14 +15,19 @@ from __future__ import annotations
 import json
 import os
 import runpy
+import socket
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from rbtools.api.client import RBClient
-from rbtools.api.errors import APIError
+from rbtools.api.errors import APIError, ServerInterfaceError
 
 _CONFIG_NAME = ".reviewboardrc"
+# Cap any single API request so a stalled/dropped keep-alive connection raises
+# instead of hanging forever; a slow-but-valid request is well under this.
+_REQUEST_TIMEOUT = 30
+_MAX_ATTEMPTS = 3
 _client: RBClient | None = None
 
 
@@ -54,10 +59,17 @@ def _load_rb_config(cwd: Path | None) -> tuple[str, str | None]:
     return url, namespace.get("API_TOKEN")
 
 
-def get_client(cwd: Path | None = None) -> RBClient:
-    """Return the cached RBClient, building it from .reviewboardrc on first use."""
+def get_client(cwd: Path | None = None, *, force_new: bool = False) -> RBClient:
+    """Return the cached RBClient, building it from .reviewboardrc on first use.
+
+    Pass force_new=True to discard a client whose keep-alive connection may be
+    stale and build a fresh one.
+    """
     global _client
+    if force_new:
+        _client = None
     if _client is None:
+        socket.setdefaulttimeout(_REQUEST_TIMEOUT)
         url, token = _load_rb_config(cwd)
         # With a token we authenticate non-interactively; without one, RBClient
         # falls back to its cached cookies, matching how `rbt` behaves.
@@ -89,12 +101,24 @@ def api_get(path: str, *, cwd: Path | None = None) -> dict[str, Any]:
     if _use_rbt_subprocess():
         return _api_get_via_rbt(path, cwd=cwd)
 
-    client = get_client(cwd)
-    try:
-        if path.startswith(("http://", "https://")):
-            resource = client.get_url(path)
+    # Retry transport/connection failures (e.g. a dropped keep-alive socket or a
+    # read that hit the request timeout) on a fresh client; genuine API errors
+    # (404, auth, ...) are not retried.
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        client = get_client(cwd, force_new=attempt > 0)
+        try:
+            if path.startswith(("http://", "https://")):
+                resource = client.get_url(path)
+            else:
+                resource = client.get_path(path)
+        except APIError as exc:
+            raise SystemExit(f"rbt api-get failed for {path}: {exc}") from exc
+        except (ServerInterfaceError, OSError) as exc:
+            last_exc = exc
+            continue
         else:
-            resource = client.get_path(path)
-    except APIError as exc:
-        raise SystemExit(f"rbt api-get failed for {path}: {exc}") from exc
-    return resource.rsp
+            return resource.rsp
+    raise SystemExit(
+        f"rbt api-get failed for {path} after {_MAX_ATTEMPTS} attempts: {last_exc}"
+    )
