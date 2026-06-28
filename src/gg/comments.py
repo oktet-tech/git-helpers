@@ -22,6 +22,10 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[
     p.add_argument(
         "-b", "--branch", default=None, help="branch (default: current)",
     )
+    p.add_argument(
+        "-p", "--progress", action="store_true",
+        help="print per-review fetch progress to stderr",
+    )
     p.set_defaults(func=run)
 
 
@@ -90,6 +94,8 @@ def run(args: argparse.Namespace) -> int:
     all_issues: list[Issue] = []
     read = 0
     skipped = 0
+    total = sum(1 for e in entries if e.review_id)
+    done = 0
     for e in entries:
         if not e.review_id:
             print(
@@ -97,6 +103,12 @@ def run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             continue
+        done += 1
+        if args.progress:
+            print(
+                f"[gg] fetching r/{e.review_id} ({done}/{total})...",
+                file=sys.stderr,
+            )
         try:
             all_issues.extend(fetch_open_issues(e.review_id, cwd=cwd))
             read += 1
