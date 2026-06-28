@@ -83,8 +83,14 @@ _LABEL = {"resolve": "reply + RESOLVE", "drop": "reply + DROP",
 
 def run_text(text: str, *, post: bool, cwd: Path | None) -> int:
     items = build_plan(parse_input(text), cwd=cwd)
-    for it in items:
-        print(f"r/{it.review_request_id} {it.file_line:30s} {_LABEL[it.action]}")
+    # Align columns dynamically: r/<id> and the action label are padded to their
+    # widest value; the variable-width file:line trails last so it never throws
+    # the action column out of alignment.
+    rows = [(f"r/{it.review_request_id}", _LABEL[it.action], it.file_line) for it in items]
+    rid_w = max((len(r) for r, _, _ in rows), default=0)
+    act_w = max((len(a) for _, a, _ in rows), default=0)
+    for rid, action, loc in rows:
+        print(f"{rid:<{rid_w}}  {action:<{act_w}}  {loc}")
     counts = {k: sum(1 for i in items if i.action == k) for k in _LABEL}
     print(f"\n{counts['resolve']} reply+resolve, {counts['drop']} reply+drop, "
           f"{sum(v for k, v in counts.items() if k.startswith('skip'))} skipped",

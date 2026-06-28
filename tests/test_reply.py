@@ -25,7 +25,10 @@ def test_dry_run_prints_plan_and_posts_nothing(monkeypatch, capsys):
     assert rc == 0
     assert posted == []
     out = capsys.readouterr().out
-    assert "r/1000 a.py:10" in out and "reply + RESOLVE" in out
+    line = next(ln for ln in out.splitlines() if "a.py:10" in ln)
+    assert line.startswith("r/1000")
+    assert "reply + RESOLVE" in line
+    assert line.rstrip().endswith("a.py:10")  # variable-width path is last column
 
 
 def test_post_calls_write_layer(monkeypatch):
