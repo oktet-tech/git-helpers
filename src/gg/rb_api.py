@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from gg import rb_session
 
 # Extract review ID from an API href like .../review-requests/123/
 _HREF_ID_RE = re.compile(r"/review-requests/(\d+)/?$")
@@ -29,17 +29,7 @@ def _parse_block_id(block: int | dict) -> str:
 
 def fetch_review(review_id: str, *, cwd: Path | None = None) -> dict:
     """Fetch a review request and return {id, summary, blocks}."""
-    r = subprocess.run(
-        ["rbt", "api-get", f"/review-requests/{review_id}/"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        msg = (r.stderr or r.stdout).strip()
-        raise SystemExit(f"rbt api-get failed for review {review_id}: {msg}")
-
-    data = json.loads(r.stdout)
+    data = rb_session.api_get(f"/review-requests/{review_id}/", cwd=cwd)
     rr = data["review_request"]
     return {
         "id": str(rr["id"]),

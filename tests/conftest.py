@@ -145,6 +145,9 @@ def _make_env(extra_path: str | None = None) -> dict[str, str]:
     env["GIT_PAGER"] = "cat"
     # Avoid terminal capabilities issues in CI
     env["TERM"] = "dumb"
+    # Tests stub `rbt`; force the rbt-subprocess transport so API reads go
+    # through the mock instead of constructing a real RBClient.
+    env["GG_RB_USE_RBT"] = "1"
     if extra_path:
         env["PATH"] = extra_path + os.pathsep + env.get("PATH", "")
     return env

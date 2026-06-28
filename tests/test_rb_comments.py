@@ -13,6 +13,9 @@ def _on_path(rbt_mock: RbtMock, monkeypatch) -> None:
     monkeypatch.setenv(
         "PATH", str(rbt_mock.script_dir) + os.pathsep + os.environ["PATH"]
     )
+    # These tests call fetch_open_issues in-process; route API reads through the
+    # stubbed rbt rather than a real RBClient.
+    monkeypatch.setenv("GG_RB_USE_RBT", "1")
 
 
 def test_open_diff_issue_collected(

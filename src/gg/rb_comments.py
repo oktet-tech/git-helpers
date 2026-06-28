@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from gg import rb_api
+from gg import rb_api, rb_session
 
 
 @dataclass
@@ -25,17 +23,8 @@ class Issue:
 
 
 def _api_get(path: str, *, cwd: Path | None = None) -> dict:
-    """Run `rbt api-get <path>` and return parsed JSON."""
-    r = subprocess.run(
-        ["rbt", "api-get", path],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        msg = (r.stderr or r.stdout).strip()
-        raise SystemExit(f"rbt api-get failed for {path}: {msg}")
-    return json.loads(r.stdout)
+    """Fetch an API resource via the shared ReviewBoard session."""
+    return rb_session.api_get(path, cwd=cwd)
 
 
 def _api_get_list(path: str, key: str, *, cwd: Path | None = None) -> list[dict]:
