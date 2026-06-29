@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from gg import diff_cache, git, rb_api, review_store
@@ -279,6 +280,28 @@ def _format_summary(actions: list[SyncAction]) -> str:
     return "Synced: " + ", ".join(parts)
 
 
+def _preserved_entries(
+    actions: list[SyncAction], branch_name: str,
+) -> list[review_store.ReviewEntry]:
+    """Skipped-discard rows (kept, not discarded) to persist alongside actions.
+
+    Positions are placeholders (0); the persist closure reassigns them after the
+    action entries.
+    """
+    out: list[review_store.ReviewEntry] = []
+    for a in actions:
+        if a.kind == ActionKind.SKIP and a.old_entry and not a.new_commit:
+            out.append(review_store.ReviewEntry(
+                branch=branch_name,
+                position=0,
+                review_id=a.old_entry.review_id,
+                subject=a.old_entry.subject,
+                diff_hash=a.old_entry.diff_hash,
+                published=bool(a.old_entry.published),
+            ))
+    return out
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute the rbt-sync subcommand."""
     cwd = Path.cwd()
@@ -386,6 +409,17 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     print()
+    preserved = _preserved_entries(actions, branch_name)
+
+    def _persist(action_entries: list[review_store.ReviewEntry]) -> None:
+        merged = list(action_entries)
+        for p in preserved:
+            merged.append(replace(p, position=len(merged) + 1))
+        review_store.save_reviews(merged, cwd=cwd)
+        diff_cache.save_hashes(
+            {e.diff_hash for e in merged}, cwd=cwd, branch=branch_name,
+        )
+
     entries = _execute(
         actions,
         branch_name=branch_name,
@@ -400,27 +434,15 @@ def run(args: argparse.Namespace) -> int:
         reviewers=args.users or None,
         groups=args.groups or None,
         no_numbers=args.no_numbers,
+        persist=_persist,
         cwd=cwd,
     )
 
-    # Preserve skipped-discard entries so they reappear next sync
-    for a in actions:
-        if a.kind == ActionKind.SKIP and a.old_entry and not a.new_commit:
-            entries.append(review_store.ReviewEntry(
-                branch=branch_name,
-                position=len(entries) + 1,
-                review_id=a.old_entry.review_id,
-                subject=a.old_entry.subject,
-                diff_hash=a.old_entry.diff_hash,
-                published=bool(a.old_entry.published),
-            ))
-
     print(_format_summary(actions), file=sys.stderr)
 
-    # Save state
-    if entries:
-        review_store.save_reviews(entries, cwd=cwd)
-        new_hashes = {e.diff_hash for e in entries}
-        diff_cache.save_hashes(new_hashes, cwd=cwd, branch=branch_name)
+    # Final backstop: the in-loop persist already wrote completed actions; this
+    # also covers an all-skipped run where the loop never persisted. save_reviews
+    # returns early on an empty list, matching the previous `if entries:` guard.
+    _persist(entries)
 
     return 0

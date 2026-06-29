@@ -1385,3 +1385,22 @@ def test_execute_persists_after_each_action(monkeypatch, tmp_path):
     )
     assert [e.review_id for e in result] == ["100", "101"]
     assert snapshots == [["100"], ["100", "101"]]
+
+
+def test_preserved_entries_returns_skipped_discards():
+    from gg import matcher, sync
+    from gg.review_store import ReviewEntry
+
+    kept = ReviewEntry("feature", 3, "900", "old kept", "hk", published=True)
+    actions = [
+        matcher.SyncAction(kind=matcher.ActionKind.CREATE, old_entry=None,
+                           new_commit=matcher.NewCommit("a", "new", "h1"),
+                           new_position=1),
+        matcher.SyncAction(kind=matcher.ActionKind.SKIP, old_entry=kept,
+                           new_commit=None, new_position=None),
+    ]
+    preserved = sync._preserved_entries(actions, "feature")
+    assert [e.review_id for e in preserved] == ["900"]
+    assert preserved[0].subject == "old kept"
+    assert preserved[0].diff_hash == "hk"
+    assert preserved[0].published is True
