@@ -1358,3 +1358,30 @@ class TestOrphanedReviewIdRepair:
         assert "update" in beta_line
         gamma_line = next(l for l in out.splitlines() if "gamma" in l and "r/" in l)
         assert "keep+dep" in gamma_line
+
+
+def test_execute_persists_after_each_action(monkeypatch, tmp_path):
+    from gg import matcher, sync
+    from gg.rbt_post import PostResult
+
+    new = [matcher.NewCommit(rev="aaa", subject="first", diff_hash="h1"),
+           matcher.NewCommit(rev="bbb", subject="second", diff_hash="h2")]
+    actions = matcher.reconcile([], new)
+
+    posts = iter(["100", "101"])
+    monkeypatch.setattr(sync, "post_one",
+                        lambda *a, **k: PostResult(review_id=next(posts), output=""))
+    monkeypatch.setattr(sync.rb_api, "fetch_reviewers", lambda *a, **k: ([], []))
+
+    snapshots: list[list[str]] = []
+    result = sync._execute(
+        actions,
+        branch_name="feature", tracking="origin/master",
+        renumber=False, publish=False, verbose=False, progress=False,
+        dry_run=False, explicit_branch=None, initial_depends=None,
+        reviewers=["rev"], groups=None, no_numbers=False,
+        persist=lambda entries: snapshots.append([e.review_id for e in entries]),
+        cwd=tmp_path,
+    )
+    assert [e.review_id for e in result] == ["100", "101"]
+    assert snapshots == [["100"], ["100", "101"]]

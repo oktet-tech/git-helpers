@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from gg import diff_cache, git, rb_api, review_store
@@ -89,6 +90,7 @@ def _execute(
     reviewers: list[str] | None = None,
     groups: list[str] | None = None,
     no_numbers: bool = False,
+    persist: Callable[[list[review_store.ReviewEntry]], None] | None = None,
     cwd: Path,
 ) -> list[review_store.ReviewEntry]:
     """Execute sync actions and return updated review entries.
@@ -176,6 +178,8 @@ def _execute(
                 diff_hash=action.new_commit.diff_hash,
                 published=entry_published,
             ))
+            if persist:
+                persist(entries)
             prev_review_id = action.old_entry.review_id
             continue
 
@@ -247,6 +251,8 @@ def _execute(
             diff_hash=action.new_commit.diff_hash,
             published=bool(publish),
         ))
+        if persist:
+            persist(entries)
         prev_review_id = rid
 
     return entries
